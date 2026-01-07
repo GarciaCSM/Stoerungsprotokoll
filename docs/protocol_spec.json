@@ -1,0 +1,146 @@
+{
+  "project": "Störungsprotokoll",
+  "version": "0.1",
+  "description": "Specification for logging disruptions (Störungen), local storage format, API endpoints and DB schema for later server implementation (IONOS PHP + MySQL).",
+
+  "database": {
+    "engine": "MySQL",
+    "notes": "Use UTF8MB4 charset; store timestamps in ISO 8601 (UTC) or DATETIME in server local timezone.",
+    "tables": {
+      "logs": {
+        "description": "Records of production runs and disruptions",
+        "columns": {
+          "id": "INT AUTO_INCREMENT PRIMARY KEY",
+          "line": "VARCHAR(100) NOT NULL",
+          "shift": "VARCHAR(50) NOT NULL",
+          "leader": "VARCHAR(100) NOT NULL",
+          "issue": "VARCHAR(255) NULL", 
+          "status": "ENUM('running','paused','störung','ended') NOT NULL",
+          "start_time": "DATETIME NULL",
+          "end_time": "DATETIME NULL",
+          "duration_seconds": "INT NULL",
+          "metadata": "JSON NULL",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+          "updated_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+        }
+      },
+      "issues": {
+        "description": "Master list of issue types (optional admin-managed)",
+        "columns": {
+          "id": "INT AUTO_INCREMENT PRIMARY KEY",
+          "line": "VARCHAR(100) NULL",
+          "label": "VARCHAR(255) NOT NULL",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        }
+      }
+    }
+  },
+
+  "api": {
+    "auth": "HTTP header 'X-API-KEY' for simple API key auth (or JWT for future), use HTTPS always",
+    "endpoints": [
+      {
+        "name": "Create Log",
+        "method": "POST",
+        "path": "/api/logs.php",
+        "auth_required": true,
+        "requestSchema": {
+          "line": "string",
+          "shift": "string",
+          "leader": "string",
+          "issue": "string (nullable)",
+          "status": "string ('running'|'paused'|'störung'|'ended')",
+          "start_time": "ISO8601 string or null",
+          "end_time": "ISO8601 string or null",
+          "duration_seconds": "integer or null",
+          "metadata": "object (optional)"
+        },
+        "responseSchema": { "ok": "boolean", "id": "integer (new record id)" },
+        "exampleRequest": {
+          "line": "Linie 1",
+          "shift": "Früh",
+          "leader": "Melih Iskender",
+          "issue": "Pumpe blockiert",
+          "status": "störung",
+          "start_time": "2026-01-07T08:32:00Z",
+          "end_time": null,
+          "duration_seconds": null,
+          "metadata": { "notes": "Pumpe stopp" }
+        }
+      },
+      {
+        "name": "Get Logs",
+        "method": "GET",
+        "path": "/api/logs.php?line=Linie+1",
+        "auth_required": true,
+        "responseSchema": "Array of log objects as in DB"
+      },
+      {
+        "name": "Get Issues",
+        "method": "GET",
+        "path": "/api/issues.php?line=Linie+1",
+        "auth_required": false
+      },
+      {
+        "name": "Sync Local Logs",
+        "method": "POST",
+        "path": "/api/sync.php",
+        "auth_required": true,
+        "requestSchema": { "logs": "array of log objects as above" }
+      }
+    ]
+  },
+
+  "client": {
+    "local_storage": {
+      "key": "local_logs",
+      "format": "JSON array of entries",
+      "entryExample": {
+        "id": 1641541234567,
+        "type": "störung",
+        "line": "Linie 1",
+        "lineNumber": "1",
+        "shift": "Früh",
+        "leader": "Melih Iskender",
+        "issue": "Pumpe blockiert",
+        "startTime": "2026-01-07T08:32:00.000Z",
+        "endTime": "2026-01-07T08:40:30.000Z",
+        "durationSeconds": 510,
+        "createdAt": "2026-01-07T08:40:30.000Z",
+        "notes": "lineNumber is stored but NOT displayed in the UI table; the table only shows entries for the currently selected line"
+      }
+    },
+    "behavior": {
+      "störung_flow": "Press 'Störung' => start stör timer; choose issue => assign issue; when pressing 'Start' (resolved) save the stör entry to local storage (see format) and continue production",
+      "sync": "When online, app should POST /api/sync.php with all unsynced local_logs, mark as synced on success"
+    }
+  },
+
+  "security": {
+    "use_https": true,
+    "sql": "Use prepared statements (PDO) to avoid injection",
+    "api_keys": "Store API keys in server env (.env); validate X-API-KEY header on write endpoints",
+    "rate_limit": "Consider rate-limiting sensitive endpoints",
+    "env": "Use .env to store DB credentials, don't commit secrets"
+  },
+
+  "deployment": {
+    "provider": "IONOS",
+    "notes": "Host PHP scripts under /api; use PHP 8.x; set up SSL; create MySQL database and user via IONOS control panel",
+    "files": ["api/logs.php","api/issues.php","api/sync.php"],
+    "env_placeholders": {
+      "DB_HOST": "your_db_host",
+      "DB_NAME": "your_db_name",
+      "DB_USER": "your_db_user",
+      "DB_PASS": "your_db_password",
+      "API_KEY": "replace_with_secret_key"
+    }
+  },
+
+  "next_steps": [
+    "Create PHP scaffold (routes + PDO helper)",
+    "Add sync endpoint and client retry logic (exponential backoff)",
+    "Add Local Logs UI (view/delete/export) for debugging and manual sync",
+    "Add server-side migration SQL and a seed for common issues per line"
+  ]
+}
