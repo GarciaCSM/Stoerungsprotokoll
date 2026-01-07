@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Animated, Easing } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Animated, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ConfirmModal from '../components/ConfirmModal';
 import { useShift } from '../context/ShiftContext';
@@ -28,50 +28,17 @@ const AnimatedButton = ({ children, onPress, accessibilityLabel, style }) => {
   );
 };
 
-// Minimal timer display with subtle animations (variant 5)
+// Minimal timer display (no animations)
 const TimerDisplay = ({ time = '00:00:00', status = null }) => {
   const label = status === 'start' ? 'Läuft' : status === 'störung' ? 'Störung' : status === 'pause' ? 'Pause' : 'Bereit';
   const chipStyle = status === 'start' ? protocolScreenStyles.timerChipGreen : status === 'störung' ? protocolScreenStyles.timerChipRed : status === 'pause' ? protocolScreenStyles.timerChipPause : protocolScreenStyles.timerChipNeutral;
 
-  // animation: pulse while running, spring on status change
-  const anim = useRef(new Animated.Value(1)).current; // for spring on change
-  const pulse = useRef(new Animated.Value(1)).current; // continuous pulse when running
-
-  useEffect(() => {
-    // spring effect on status change
-    anim.setValue(0.95);
-    Animated.spring(anim, { toValue: 1, friction: 8, useNativeDriver: true }).start();
-  }, [status]);
-
-  useEffect(() => {
-    let loop;
-    if (status === 'start') {
-      // continuous slow pulse
-      loop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulse, { toValue: 1.03, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          Animated.timing(pulse, { toValue: 1.0, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        ])
-      );
-      loop.start();
-    } else {
-      pulse.setValue(1);
-      if (loop && loop.stop) loop.stop();
-    }
-    return () => {
-      if (loop && loop.stop) loop.stop();
-      pulse.setValue(1);
-    };
-  }, [status]);
-
-  const combinedScale = Animated.multiply(anim, pulse);
-
   return (
     <View style={protocolScreenStyles.timerContainer}>
-      <Animated.Text style={[protocolScreenStyles.timerText, { transform: [{ scale: combinedScale }] }]}>{time}</Animated.Text>
-      <Animated.View style={[protocolScreenStyles.timerChip, chipStyle, { transform: [{ scale: anim }], marginTop: 12 }]}>
+      <Text style={protocolScreenStyles.timerText}>{time}</Text>
+      <View style={[protocolScreenStyles.timerChip, chipStyle, { marginTop: 12 }]}>
         <Text style={protocolScreenStyles.timerChipText}>{label}</Text>
-      </Animated.View>
+      </View>
     </View>
   );
 };
@@ -85,6 +52,7 @@ const ProtocolScreen = ({ onBack }) => {
   const [running, setRunning] = useState(false);
   const [activeButton, setActiveButton] = useState(null); // 'start' | 'störung' | 'pause' | null
   const [selectedIssue, setSelectedIssue] = useState(null); // when a störung button is selected
+  const [sonstigesText, setSonstigesText] = useState(''); // description when Sonstiges selected
   const [showStartOnly, setShowStartOnly] = useState(false); // when true, only show Start button
 
   // Störung timer state
@@ -92,6 +60,8 @@ const ProtocolScreen = ({ onBack }) => {
   const [stoerRunning, setStoerRunning] = useState(false);
   const [stoerElapsed, setStoerElapsed] = useState(0); // seconds
   const stoerIntervalRef = useRef(null);
+  // remember whether the main timer was running before starting a stör (so we can restore it on cancel)
+  const prevRunningBeforeStoer = useRef(false);
 
   const intervalRef = useRef(null);
 
@@ -149,6 +119,22 @@ const ProtocolScreen = ({ onBack }) => {
   // Persist a störung log locally (AsyncStorage) — no DB yet
   const [localLogs, setLocalLogs] = useState([]);
 
+  // View mode: 'logs' (default table) or 'summary' (aggregated view)
+  const [viewMode, setViewMode] = useState('logs');
+
+  // Compute summary (count and total duration) for possible issues for current line/shift
+  const computeIssueSummary = () => {
+    // prefer configured issues for the selected line; fall back to unique issues seen in today's logs
+    const cfg = lineButtonConfig[shiftData.selectedLine] && lineButtonConfig[shiftData.selectedLine].störung ? lineButtonConfig[shiftData.selectedLine].störung : [];
+    const issues = cfg && cfg.length ? cfg : [...new Set(localLogs.map(l => l.issue).filter(Boolean))];
+    return issues.map((label) => {
+      const entries = localLogs.filter(e => e.issue === label);
+      const count = entries.length;
+      const totalSeconds = entries.reduce((s, e) => s + (e.durationSeconds || 0), 0);
+      return { label, count, totalSeconds };
+    });
+  };
+
   const loadLocalLogs = async () => {
     try {
       const key = 'local_logs';
@@ -173,7 +159,7 @@ const ProtocolScreen = ({ onBack }) => {
     loadLocalLogs();
   }, [shiftData.selectedLine, shiftData.selectedShift]);
 
-  const saveStoerLog = async ({ issue, startTime, endTime, durationSeconds }) => {
+  const saveStoerLog = async ({ issue, startTime, endTime, durationSeconds, notes }) => {
     try {
       const key = 'local_logs';
       const raw = await AsyncStorage.getItem(key);
@@ -188,6 +174,7 @@ const ProtocolScreen = ({ onBack }) => {
         shift_type: shiftData.selectedShift, // explicit field for server ENUM compatibility
         leader: shiftData.selectedLeader,
         issue,
+        notes: notes || null,
         startTime: new Date(startTime).toISOString(),
         endTime: new Date(endTime).toISOString(),
         durationSeconds,
@@ -221,11 +208,15 @@ const ProtocolScreen = ({ onBack }) => {
     if (selectedIssue && stoerStart) {
       const end = Date.now();
       const durationSeconds = Math.round((end - stoerStart) / 1000);
-      await saveStoerLog({ issue: selectedIssue, startTime: stoerStart, endTime: end, durationSeconds });
+      const notes = selectedIssue === 'Sonstiges' ? sonstigesText : undefined;
+      await saveStoerLog({ issue: selectedIssue, startTime: stoerStart, endTime: end, durationSeconds, notes });
       // reset stör timer
       setStoerStart(null);
       setStoerRunning(false);
       setStoerElapsed(0);
+      setSonstigesText('');
+      // clear stored prev running flag
+      prevRunningBeforeStoer.current = false;
     }
 
     setActiveButton('start');
@@ -242,24 +233,36 @@ const ProtocolScreen = ({ onBack }) => {
   };
 
   const handleStörungClick = () => {
+    // Öffne die Störungs‑Auswahl und stoppe den Haupt‑Timer sofort.
+    // Merke den aktuellen Timerzustand (nur für Referenz), aber wir starten den Haupt‑Timer erst wieder wenn der Benutzer ausdrücklich zurückkehrt.
+    prevRunningBeforeStoer.current = running;
     setCurrentView('störung');
     setActiveButton('störung');
+    // stoppe den Haupt-Timer sofort
     setRunning(false);
-    // Start stör timer
+  };
+
+  const handleIssueSelect = (issueLabel) => {
+    // user selected a specific störung cause -> start stör timer and stop main timer
+    setSelectedIssue(issueLabel);
+    // clear any previous Sonstiges text unless Sonstiges was just chosen
+    if (issueLabel !== 'Sonstiges') setSonstigesText('');
+
+    // remember previous running state so we can restore it on cancel
+    prevRunningBeforeStoer.current = running;
+
+    // Beginne Störungs-Timer erst beim konkreten Auswählen
     if (!stoerRunning) {
       const now = Date.now();
       setStoerStart(now);
       setStoerRunning(true);
       setStoerElapsed(0);
     }
-  };
 
-  const handleIssueSelect = (issueLabel) => {
-    // user selected a specific störung cause -> they assign it to the running stör timer
-    setSelectedIssue(issueLabel);
     setShowStartOnly(true);
     setCurrentView('initial');
     setActiveButton('störung');
+    // stoppe den Haupt-Timer **erst jetzt**
     setRunning(false);
     console.log('Issue selected:', issueLabel);
   };
@@ -283,34 +286,49 @@ const ProtocolScreen = ({ onBack }) => {
     handleEnde();
   };
 
-  // Funktion um Buttons in Reihen zu je 3 nebeneinander anzuzeigen
+  // Responsive buttons: use flexWrap so they adapt to screen width and always fit
   const renderButtons = (buttons) => {
-    const rows = [];
-    for (let i = 0; i < buttons.length; i += 3) {
-      rows.push(buttons.slice(i, i + 3));
-    }
-    return rows.map((row, rowIndex) => (
-      <View key={rowIndex} style={protocolScreenStyles.buttonRow}>
-        {row.map((buttonLabel, index) => (
+    return (
+      <View style={protocolScreenStyles.responsiveButtonContainer}>
+        {buttons.map((buttonLabel, index) => (
           <AnimatedButton
             key={index}
-            style={[protocolScreenStyles.buttonSize, protocolScreenStyles.actionButton]}
+            style={[protocolScreenStyles.buttonResponsive, protocolScreenStyles.actionButton]}
             onPress={() => handleIssueSelect(buttonLabel)}
           >
             <Text style={protocolScreenStyles.actionButtonText}>{buttonLabel}</Text>
           </AnimatedButton>
         ))}
       </View>
-    ));
+    );
   };
 
 
   const handleZurückClick = () => {
     if (currentView === 'störung') {
+      // leave the stör selection and ensure main timer is running (set status to 'Läuft')
       setCurrentView('initial');
-    } else {
-      onBack();
+      setActiveButton('start');
+      setRunning(true);
+      // reset previous flag
+      prevRunningBeforeStoer.current = false;
+      return;
     }
+
+    // If a stör timer is currently running, interpret 'Zurück' as canceling the stör and resuming production (always restart main timer)
+    if (stoerRunning) {
+      setStoerRunning(false);
+      setStoerStart(null);
+      setStoerElapsed(0);
+      setSelectedIssue(null);
+      // always restart the main timer on cancel
+      setActiveButton('start');
+      setRunning(true);
+      prevRunningBeforeStoer.current = false;
+      return;
+    }
+
+    onBack();
   };
 
   return (
@@ -327,45 +345,94 @@ const ProtocolScreen = ({ onBack }) => {
             <Text style={protocolScreenStyles.stoerTimerText}>Stör-Timer: {formatTime(stoerElapsed)}</Text>
           )}
           {selectedIssue && (
-            <Text style={protocolScreenStyles.selectedIssueText}>Aktuelle Störung: {selectedIssue}</Text>
+            <>
+              <Text style={protocolScreenStyles.selectedIssueText}>Aktuelle Störung: {selectedIssue}</Text>
+              {selectedIssue === 'Sonstiges' && (
+                <TextInput
+                  style={protocolScreenStyles.sonstigesInput}
+                  placeholder="Beschreibe die Störung..."
+                  value={sonstigesText}
+                  onChangeText={setSonstigesText}
+                  multiline
+                />
+              )}
+            </>
           )}
 
           <View style={protocolScreenStyles.buttonsRowCentered}>
 
           </View>
 
-          {/* Local logs table for today */}
-          <View style={protocolScreenStyles.tableContainer}>
-            <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
-            <Text style={protocolScreenStyles.tableTitle}>Lokale Störungsprotokolle (Heute)</Text>
-            <TouchableOpacity onPress={clearAllLocalLogs} accessibilityLabel="Logs leeren">
-              <Text style={[protocolScreenStyles.smallDangerButton]}>Logs leeren</Text>
-            </TouchableOpacity>
-          </View>
-            <View style={protocolScreenStyles.tableHeader}>
-              <Text style={[protocolScreenStyles.tableCell, {flex:2}]}>Störung</Text>
-              <Text style={[protocolScreenStyles.tableCell]}>Schicht</Text>
-              <Text style={[protocolScreenStyles.tableCell]}>Start</Text>
-              <Text style={[protocolScreenStyles.tableCell]}>Ende</Text>
-              <Text style={[protocolScreenStyles.tableCell]}>Dauer</Text>
-            </View>
-            {localLogs.length === 0 && (
-              <Text style={protocolScreenStyles.tableEmpty}>Keine Einträge für {shiftData.selectedShift ? shiftData.selectedShift + ' (Heute)' : 'heute'}</Text>
-            )}
+          {/* Local logs table for today: hidden when a specific issue is selected */}
+          {!selectedIssue && (
+            <View style={protocolScreenStyles.tableContainer}>
+              <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+                <Text style={protocolScreenStyles.tableTitle}>Lokale Störungsprotokolle (Heute)</Text>
+                <TouchableOpacity onPress={clearAllLocalLogs} accessibilityLabel="Logs leeren">
+                  <Text style={[protocolScreenStyles.smallDangerButton]}>Logs leeren</Text>
+                </TouchableOpacity>
+              </View>
 
-            {/* make rows scrollable if many entries */}
-            <ScrollView style={protocolScreenStyles.tableScroll}>
-              {localLogs.map((log) => (
-                <View key={log.id} style={protocolScreenStyles.tableRow}>
-                  <Text style={[protocolScreenStyles.tableCell, {flex:2}]}>{log.issue}</Text>
-                  <Text style={[protocolScreenStyles.tableCell]}>{log.shift_type || log.shift || '-'}</Text>
-                  <Text style={protocolScreenStyles.tableCell}>{new Date(log.startTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</Text>
-                  <Text style={protocolScreenStyles.tableCell}>{new Date(log.endTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</Text>
-                  <Text style={protocolScreenStyles.tableCell}>{formatTime(log.durationSeconds)}</Text>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
+              {/* Tabs: switch between raw logs and aggregated summary */}
+              <View style={protocolScreenStyles.tabRow}>
+                <TouchableOpacity onPress={() => setViewMode('logs')} style={[protocolScreenStyles.tabButton, viewMode === 'logs' && protocolScreenStyles.tabActive]}>
+                  <Text style={protocolScreenStyles.tabText}>Protokolle</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setViewMode('summary')} style={[protocolScreenStyles.tabButton, viewMode === 'summary' && protocolScreenStyles.tabActive]}>
+                  <Text style={protocolScreenStyles.tabText}>Übersicht ({localLogs.length})</Text>
+                </TouchableOpacity>
+              </View>
+
+              {viewMode === 'logs' ? (
+                <>
+                  <View style={protocolScreenStyles.tableHeader}>
+                    <Text style={[protocolScreenStyles.tableCell, {flex:2}]}>Störung</Text>
+                    <Text style={[protocolScreenStyles.tableCell]}>Start</Text>
+                    <Text style={[protocolScreenStyles.tableCell]}>Ende</Text>
+                    <Text style={[protocolScreenStyles.tableCell]}>Dauer</Text>
+                  </View>
+                  {localLogs.length === 0 && (
+                    <Text style={protocolScreenStyles.tableEmpty}>Keine Einträge für {shiftData.selectedShift ? shiftData.selectedShift + ' (Heute)' : 'heute'}</Text>
+                  )}
+
+                  {/* make rows scrollable if many entries */}
+                  <ScrollView style={protocolScreenStyles.tableScroll}>
+                    {localLogs.map((log) => (
+                      <View key={log.id} style={protocolScreenStyles.tableRow}>
+                    <View style={{flex:2}}>
+                      <Text style={protocolScreenStyles.tableCell}>{log.issue}</Text>
+                      {log.notes ? <Text style={protocolScreenStyles.tableNote}>{log.notes}</Text> : null}
+                    </View>
+                        <Text style={protocolScreenStyles.tableCell}>{new Date(log.startTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</Text>
+                        <Text style={protocolScreenStyles.tableCell}>{new Date(log.endTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</Text>
+                        <Text style={protocolScreenStyles.tableCell}>{formatTime(log.durationSeconds)}</Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </>
+              ) : (
+                <>
+                  <View style={protocolScreenStyles.tableHeader}>
+                    <Text style={[protocolScreenStyles.tableCell, {flex:2}]}>Störung</Text>
+                    <Text style={[protocolScreenStyles.tableCell]}>Anzahl</Text>
+                    <Text style={[protocolScreenStyles.tableCell]}>Gesamtzeit</Text>
+                  </View>
+                  {computeIssueSummary().length === 0 && (
+                    <Text style={protocolScreenStyles.tableEmpty}>Keine definierten Störungen</Text>
+                  )}
+                  <ScrollView style={protocolScreenStyles.tableScroll}>
+                    {computeIssueSummary().map((item) => (
+                      <View key={item.label} style={protocolScreenStyles.tableRow}>
+                        <Text style={[protocolScreenStyles.tableCell, {flex:2}]}>{item.label}</Text>
+                        <Text style={protocolScreenStyles.tableCell}>{item.count}</Text>
+                        <Text style={protocolScreenStyles.tableCell}>{formatTime(item.totalSeconds)}</Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
+            </View>
+          )}
 
           <View style={{height:20}} />
 

@@ -55,6 +55,25 @@ export const protocolScreenStyles = StyleSheet.create({
     marginBottom: 24,
     gap: 64,
   },
+  responsiveButtonContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 18,
+    gap: 12,
+  },
+  buttonResponsive: {
+    flexBasis: '30%',
+    minWidth: 140,
+    maxWidth: 240,
+    height: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 50,
+    margin: 8,
+    paddingHorizontal: 12,
+  },
   container: {
     flex: 1,
     backgroundColor: '#f1f5f9',
@@ -209,7 +228,7 @@ export const protocolScreenStyles = StyleSheet.create({
     width: '100%',
     marginTop: 18,
     paddingHorizontal: 24,
-    height: 260, /* fixed height so table does not grow; fits ~5 rows + header */
+    height: 340, /* larger fixed height to show more rows */
   },
   tableTitle: {
     fontSize: 16,
@@ -221,6 +240,30 @@ export const protocolScreenStyles = StyleSheet.create({
     color: '#ef4444',
     fontWeight: '700',
     fontSize: 14,
+  },
+  tabRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  tabButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: '#f8fafc',
+  },
+  tabActive: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#64748b',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  tabText: {
+    fontWeight: '700',
+    color: '#334155',
   },
   tableHeader: {
     flexDirection: 'row',
@@ -242,14 +285,31 @@ export const protocolScreenStyles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
+  tableNote: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginTop: 6,
+    textAlign: 'left',
+  },
+  sonstigesInput: {
+    marginTop: 8,
+    width: '90%',
+    minHeight: 56,
+    backgroundColor: '#ffffff',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    color: '#0f172a',
+  },
   tableEmpty: {
     color: '#94a3b8',
     fontSize: 14,
     paddingVertical: 10,
   },
   tableScroll: {
-    // fixed scroll height to show ~5 rows; table won't grow larger
-    height: 220,
+    // increased scroll height to show more rows
+    height: 280,
     marginTop: 6,
   },
   timerContainer: {
