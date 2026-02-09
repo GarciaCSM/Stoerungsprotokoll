@@ -50,7 +50,7 @@ const TimerDisplay = ({ time = '00:00:00', status = null }) => {
 };
 
 const ProtocolScreen = ({ onBack }) => {
-  const { shiftData } = useShift();
+  const { shiftData, updateShiftData } = useShift();
   const [currentView, setCurrentView] = useState('initial'); // 'initial' oder 'störung'
 
   // Timer state
@@ -70,12 +70,19 @@ const ProtocolScreen = ({ onBack }) => {
   const prevRunningBeforeStoer = useRef(false);
 
   const intervalRef = useRef(null);
+  const mainTimerStartTime = useRef(null); // timestamp when main timer started (for persistence)
 
   useEffect(() => {
     if (running) {
+      // if starting, set start time
+      if (!mainTimerStartTime.current) {
+        mainTimerStartTime.current = Date.now() - (elapsed * 1000);
+      }
       if (!intervalRef.current) {
         intervalRef.current = setInterval(() => {
-          setElapsed((s) => s + 1);
+          const now = Date.now();
+          const newElapsed = Math.floor((now - mainTimerStartTime.current) / 1000);
+          setElapsed(newElapsed);
         }, 1000);
       }
     } else {
@@ -165,6 +172,46 @@ const ProtocolScreen = ({ onBack }) => {
     loadLocalLogs();
   }, [shiftData.selectedLine, shiftData.selectedShift]);
 
+  // Load timer state from AsyncStorage on mount
+  useEffect(() => {
+    const loadTimerState = async () => {
+      try {
+        const timerStateRaw = await AsyncStorage.getItem('timer_state');
+        if (timerStateRaw) {
+          const timerState = JSON.parse(timerStateRaw);
+          const now = Date.now();
+          // restore state
+          if (timerState.running && timerState.startTime) {
+            const elapsedMs = now - timerState.startTime;
+            const elapsedSec = Math.floor(elapsedMs / 1000);
+            mainTimerStartTime.current = timerState.startTime;
+            setElapsed(elapsedSec);
+            setRunning(true);
+            setActiveButton(timerState.activeButton || 'start');
+          } else {
+            setElapsed(timerState.elapsed || 0);
+            setRunning(false);
+            setActiveButton(timerState.activeButton || null);
+          }
+          // restore störung state
+          if (timerState.selectedIssue) {
+            setSelectedIssue(timerState.selectedIssue);
+            setShowStartOnly(true);
+          }
+          if (timerState.stoerStart && timerState.stoerRunning) {
+            setStoerStart(timerState.stoerStart);
+            setStoerRunning(true);
+            const stoerElapsedSec = Math.floor((now - timerState.stoerStart) / 1000);
+            setStoerElapsed(stoerElapsedSec);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load timer state', e);
+      }
+    };
+    loadTimerState();
+  }, []);
+
   const saveStoerLog = async ({ issue, startTime, endTime, durationSeconds, notes }) => {
     try {
       const key = 'local_logs';
@@ -195,6 +242,30 @@ const ProtocolScreen = ({ onBack }) => {
       console.warn('Failed to save störung log', e);
     }
   };
+
+  // Save timer state to AsyncStorage whenever it changes
+  const saveTimerState = async () => {
+    try {
+      const timerState = {
+        elapsed,
+        running,
+        activeButton,
+        selectedIssue,
+        showStartOnly,
+        startTime: mainTimerStartTime.current,
+        stoerStart,
+        stoerRunning,
+      };
+      await AsyncStorage.setItem('timer_state', JSON.stringify(timerState));
+    } catch (e) {
+      console.warn('Failed to save timer state', e);
+    }
+  };
+
+  // Auto-save timer state whenever relevant values change
+  useEffect(() => {
+    saveTimerState();
+  }, [elapsed, running, activeButton, selectedIssue, showStartOnly, stoerStart, stoerRunning]);
 
   // Dev helper: clear all local logs (no confirmation) — used to quickly empty tables
   const clearAllLocalLogs = async () => {
@@ -283,6 +354,33 @@ const ProtocolScreen = ({ onBack }) => {
     // clear any selected issue
     setSelectedIssue(null);
     setShowStartOnly(false);
+    // reset timer start time
+    mainTimerStartTime.current = null;
+    // clear stored timer state
+    try {
+      await AsyncStorage.removeItem('timer_state');
+    } catch (e) {
+      console.warn('Failed to clear timer state', e);
+    }
+
+    // remove assigned line and related leader/shift when production is finished so the tablet will ask again next time
+    try {
+      await AsyncStorage.removeItem('assigned_line');
+      await AsyncStorage.removeItem('assigned_leader');
+      await AsyncStorage.removeItem('assigned_shift');
+    } catch (e) {
+      console.warn('Failed to remove assigned assignment keys', e);
+    }
+
+    // reset global shift data (line, leader, shift)
+    try {
+      updateShiftData({ selectedLine: null, selectedLeader: null, selectedShift: null });
+    } catch (e) {
+      console.warn('Failed to update shift data', e);
+    }
+
+    // navigate back to home so the UI asks for new data
+    onBack();
   };
 
   const openEndConfirm = () => setShowEndConfirm(true);

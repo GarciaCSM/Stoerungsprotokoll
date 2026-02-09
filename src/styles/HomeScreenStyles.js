@@ -122,5 +122,55 @@ export const homeScreenStyles = StyleSheet.create({
     fontSize: 16,
     color: '#2c3e50',
   },
+
+  assignedLineText: {
+    backgroundColor: '#fff',
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    textAlign: 'center',
+    color: '#2c3e50',
+    fontWeight: '600',
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 520,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    elevation: 6,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  modalItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  modalItemText: {
+    fontSize: 15,
+    color: '#2c3e50',
+  },
+  modalCancel: {
+    padding: 10,
+  },
+  modalDanger: {
+    backgroundColor: '#e53935',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  }
 });
 
