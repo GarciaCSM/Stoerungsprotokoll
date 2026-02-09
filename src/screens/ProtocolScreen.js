@@ -5,6 +5,12 @@ import ConfirmModal from '../components/ConfirmModal';
 import { useShift } from '../context/ShiftContext';
 import { protocolScreenStyles } from '../styles/ProtocolScreenStyles';
 import { lineButtonConfig } from '../config/lineButtonConfig';
+import { MaterialIcons, Feather } from '@expo/vector-icons';
+
+// Colors for inline usage
+const COLORS = {
+  foreground: '#0F172A',
+};
 
 // Reusable animated button with press feedback
 const AnimatedButton = ({ children, onPress, accessibilityLabel, style }) => {
@@ -286,19 +292,32 @@ const ProtocolScreen = ({ onBack }) => {
     handleEnde();
   };
 
-  // Responsive buttons: use flexWrap so they adapt to screen width and always fit
+  // Responsive buttons: use flexWrap so they adapt to screen width — for 'störung' view show modal-like selector
   const renderButtons = (buttons) => {
     return (
-      <View style={protocolScreenStyles.responsiveButtonContainer}>
-        {buttons.map((buttonLabel, index) => (
-          <AnimatedButton
-            key={index}
-            style={[protocolScreenStyles.buttonResponsive, protocolScreenStyles.actionButton]}
-            onPress={() => handleIssueSelect(buttonLabel)}
-          >
-            <Text style={protocolScreenStyles.actionButtonText}>{buttonLabel}</Text>
-          </AnimatedButton>
-        ))}
+      <View style={{width: '100%'}}>
+        <View style={protocolScreenStyles.modalSelectCard}>
+          <View style={protocolScreenStyles.modalHeaderRow}>
+            <Text style={protocolScreenStyles.modalTitle}>Störung auswählen</Text>
+            <TouchableOpacity onPress={() => setCurrentView('initial')}> 
+              <Text style={protocolScreenStyles.modalClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={protocolScreenStyles.gridContainer}>
+            {buttons.map((buttonLabel, index) => (
+              <AnimatedButton
+                key={index}
+                style={protocolScreenStyles.disturbanceCard}
+                onPress={() => handleIssueSelect(buttonLabel)}
+              >
+                <View style={{alignItems: 'center'}}>
+                  <MaterialIcons name="warning" size={20} color="#94A3B8" style={protocolScreenStyles.disturbanceIcon} />
+                  <Text style={protocolScreenStyles.actionButtonText} numberOfLines={2} ellipsizeMode="tail">{buttonLabel}</Text>
+                </View>
+              </AnimatedButton>
+            ))}
+          </View>
+        </View>
       </View>
     );
   };
@@ -365,73 +384,82 @@ const ProtocolScreen = ({ onBack }) => {
 
           {/* Local logs table for today: hidden when a specific issue is selected */}
           {!selectedIssue && (
-            <View style={protocolScreenStyles.tableContainer}>
-              <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
-                <Text style={protocolScreenStyles.tableTitle}>Lokale Störungsprotokolle (Heute)</Text>
-                <TouchableOpacity onPress={clearAllLocalLogs} accessibilityLabel="Logs leeren">
-                  <Text style={[protocolScreenStyles.smallDangerButton]}>Logs leeren</Text>
-                </TouchableOpacity>
-              </View>
+            currentView === 'störung' ? (
+              // show modal-like full width selector above the table
+              lineButtonConfig[shiftData.selectedLine] && lineButtonConfig[shiftData.selectedLine].störung && (
+                <View style={{width: '100%'}}>
+                  {renderButtons(lineButtonConfig[shiftData.selectedLine].störung)}
+                </View>
+              )
+            ) : (
+              <>
+                {/* Header outside table container */}
+                <View style={protocolScreenStyles.tableTitleRow}>
+                  <Text style={protocolScreenStyles.tableTitle}>Lokale Störungsprotokolle (Heute)</Text>
+                  <TouchableOpacity onPress={clearAllLocalLogs} accessibilityLabel="Logs leeren">
+                    <Text style={protocolScreenStyles.smallDangerButton}>🗑️ Logs leeren</Text>
+                  </TouchableOpacity>
+                </View>
 
-              {/* Tabs: switch between raw logs and aggregated summary */}
-              <View style={protocolScreenStyles.tabRow}>
-                <TouchableOpacity onPress={() => setViewMode('logs')} style={[protocolScreenStyles.tabButton, viewMode === 'logs' && protocolScreenStyles.tabActive]}>
-                  <Text style={protocolScreenStyles.tabText}>Protokolle</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setViewMode('summary')} style={[protocolScreenStyles.tabButton, viewMode === 'summary' && protocolScreenStyles.tabActive]}>
-                  <Text style={protocolScreenStyles.tabText}>Übersicht ({localLogs.length})</Text>
-                </TouchableOpacity>
-              </View>
+                {/* Tabs: switch between raw logs and aggregated summary */}
+                <View style={protocolScreenStyles.tabRow}>
+                  <TouchableOpacity onPress={() => setViewMode('logs')} style={[protocolScreenStyles.tabButton, viewMode === 'logs' && protocolScreenStyles.tabActive]}>
+                    <Text style={[protocolScreenStyles.tabText, viewMode === 'logs' && {color: COLORS.foreground}]}>Protokolle</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setViewMode('summary')} style={[protocolScreenStyles.tabButton, viewMode === 'summary' && protocolScreenStyles.tabActive]}>
+                    <Text style={[protocolScreenStyles.tabText, viewMode === 'summary' && {color: COLORS.foreground}]}>Übersicht ({localLogs.length})</Text>
+                  </TouchableOpacity>
+                </View>
 
-              {viewMode === 'logs' ? (
-                <>
-                  <View style={protocolScreenStyles.tableHeader}>
-                    <Text style={[protocolScreenStyles.tableCell, {flex:2}]}>Störung</Text>
-                    <Text style={[protocolScreenStyles.tableCell]}>Start</Text>
-                    <Text style={[protocolScreenStyles.tableCell]}>Ende</Text>
-                    <Text style={[protocolScreenStyles.tableCell]}>Dauer</Text>
-                  </View>
-                  {localLogs.length === 0 && (
-                    <Text style={protocolScreenStyles.tableEmpty}>Keine Einträge für {shiftData.selectedShift ? shiftData.selectedShift + ' (Heute)' : 'heute'}</Text>
-                  )}
+                <View style={protocolScreenStyles.tableContainer}>
 
-                  {/* make rows scrollable if many entries */}
-                  <ScrollView style={protocolScreenStyles.tableScroll}>
-                    {localLogs.map((log) => (
-                      <View key={log.id} style={protocolScreenStyles.tableRow}>
-                    <View style={{flex:2}}>
-                      <Text style={protocolScreenStyles.tableCell}>{log.issue}</Text>
-                      {log.notes ? <Text style={protocolScreenStyles.tableNote}>{log.notes}</Text> : null}
+                {viewMode === 'logs' ? (
+                  <>
+                    <View style={protocolScreenStyles.tableHeader}>
+                      <Text style={[protocolScreenStyles.tableHeaderCellLeft, {flex:2}]}>Störung</Text>
+                      <Text style={protocolScreenStyles.tableHeaderCell}>Start</Text>
+                      <Text style={protocolScreenStyles.tableHeaderCell}>Ende</Text>
+                      <Text style={protocolScreenStyles.tableHeaderCell}>Dauer</Text>
                     </View>
-                        <Text style={protocolScreenStyles.tableCell}>{new Date(log.startTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</Text>
-                        <Text style={protocolScreenStyles.tableCell}>{new Date(log.endTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</Text>
-                        <Text style={protocolScreenStyles.tableCell}>{formatTime(log.durationSeconds)}</Text>
+                    {localLogs.length === 0 && (
+                      <Text style={protocolScreenStyles.tableEmpty}>Keine Einträge für {shiftData.selectedShift ? shiftData.selectedShift + ' (Heute)' : 'heute'}</Text>
+                    )}
+
+                    {/* make rows scrollable if many entries */}
+                    <ScrollView style={protocolScreenStyles.tableScroll} nestedScrollEnabled={true} showsVerticalScrollIndicator={true}>
+                      {localLogs.map((log) => (
+                        <View key={log.id} style={protocolScreenStyles.tableRow}>
+                      <View style={{flex:2}}>
+                        <Text style={protocolScreenStyles.tableCellLeft}>{log.issue}</Text>
+                        {log.notes ? <Text style={protocolScreenStyles.tableNote}>{log.notes}</Text> : null}
                       </View>
-                    ))}
-                  </ScrollView>
-                </>
-              ) : (
-                <>
-                  <View style={protocolScreenStyles.tableHeader}>
-                    <Text style={[protocolScreenStyles.tableCell, {flex:2}]}>Störung</Text>
-                    <Text style={[protocolScreenStyles.tableCell]}>Anzahl</Text>
-                    <Text style={[protocolScreenStyles.tableCell]}>Gesamtzeit</Text>
-                  </View>
-                  {computeIssueSummary().length === 0 && (
-                    <Text style={protocolScreenStyles.tableEmpty}>Keine definierten Störungen</Text>
-                  )}
-                  <ScrollView style={protocolScreenStyles.tableScroll}>
-                    {computeIssueSummary().map((item) => (
-                      <View key={item.label} style={protocolScreenStyles.tableRow}>
-                        <Text style={[protocolScreenStyles.tableCell, {flex:2}]}>{item.label}</Text>
-                        <Text style={protocolScreenStyles.tableCell}>{item.count}</Text>
-                        <Text style={protocolScreenStyles.tableCell}>{formatTime(item.totalSeconds)}</Text>
+                          <Text style={protocolScreenStyles.tableCell}>{new Date(log.startTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</Text>
+                          <Text style={protocolScreenStyles.tableCell}>{new Date(log.endTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</Text>
+                          <Text style={protocolScreenStyles.tableCell}>{formatTime(log.durationSeconds)}</Text>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  </>
+                ) : (
+                  <>
+                    {computeIssueSummary().length === 0 ? (
+                      <Text style={protocolScreenStyles.tableEmpty}>Keine definierten Störungen</Text>
+                    ) : (
+                      <View style={protocolScreenStyles.summaryGrid}>
+                        {computeIssueSummary().map((item) => (
+                          <View key={item.label} style={protocolScreenStyles.summaryCard}>
+                            <Text style={protocolScreenStyles.summaryCount}>{item.count}</Text>
+                            <Text style={protocolScreenStyles.summaryLabel}>{item.label}</Text>
+                            <Text style={protocolScreenStyles.summaryTime}>{formatTime(item.totalSeconds)}</Text>
+                          </View>
+                        ))}
                       </View>
-                    ))}
-                  </ScrollView>
-                </>
-              )}
-            </View>
+                    )}
+                  </>
+                )}
+                </View>
+              </>
+            )
           )}
 
           <View style={{height:20}} />
@@ -450,8 +478,10 @@ const ProtocolScreen = ({ onBack }) => {
                   onPress={handleStart}
                 >
                   <View style={protocolScreenStyles.buttonContent}>
-                    <Text style={protocolScreenStyles.buttonIconSmall}>▶️</Text>
-                    <Text style={protocolScreenStyles.buttonLabelOnButton}>Produktion starten</Text>
+                    <View style={protocolScreenStyles.buttonIconContainer}>
+                      <MaterialIcons name="play-arrow" size={16} color="#10B981" />
+                    </View>
+                    <Text style={protocolScreenStyles.buttonLabelOnButton} numberOfLines={1} ellipsizeMode={'tail'}>Produktion starten</Text>
                   </View>
                 </AnimatedButton>
               ) : (
@@ -466,8 +496,10 @@ const ProtocolScreen = ({ onBack }) => {
                     onPress={handleStart}
                   >
                     <View style={protocolScreenStyles.buttonContent}>
-                      <Text style={protocolScreenStyles.buttonIconSmall}>▶️</Text>
-                      <Text style={protocolScreenStyles.buttonLabelOnButton}>Produktion starten</Text>
+                      <View style={protocolScreenStyles.iconStartOutline}>
+                        <Feather name="play" size={16} color="#ffffff" />
+                      </View> 
+                      <Text style={protocolScreenStyles.buttonLabelOnButton} numberOfLines={1} ellipsizeMode={'tail'}>Produktion starten</Text>
                     </View>
                   </AnimatedButton>
 
@@ -481,8 +513,10 @@ const ProtocolScreen = ({ onBack }) => {
                     onPress={handleStörungClick}
                   >
                     <View style={protocolScreenStyles.buttonContent}>
-                      <Text style={protocolScreenStyles.buttonIconSmall}>⚠️</Text>
-                      <Text style={protocolScreenStyles.buttonLabelOnButton}>Störung melden</Text>
+                      <View style={[protocolScreenStyles.buttonIconContainer, { backgroundColor: '#F59E0B' }]}>
+                        <MaterialIcons name="warning" size={16} color="#ffffff" />
+                      </View>
+                      <Text style={protocolScreenStyles.buttonLabelOnButton} numberOfLines={1} ellipsizeMode={'tail'}>Störung melden</Text>
                     </View>
                   </AnimatedButton>
 
@@ -496,8 +530,10 @@ const ProtocolScreen = ({ onBack }) => {
                     onPress={handlePause}
                   >
                     <View style={protocolScreenStyles.buttonContent}>
-                      <Text style={protocolScreenStyles.buttonIconSmall}>⏸️</Text>
-                      <Text style={protocolScreenStyles.buttonLabelOnButton}>Pause setzen</Text>
+                      <View style={[protocolScreenStyles.buttonIconContainer, { backgroundColor: '#3B82F6' }]}>
+                        <MaterialIcons name="pause" size={16} color="#ffffff" />
+                      </View>
+                      <Text style={protocolScreenStyles.buttonLabelOnButton} numberOfLines={1} ellipsizeMode={'tail'}>Pause setzen</Text>
                     </View>
                   </AnimatedButton>
 
@@ -510,8 +546,10 @@ const ProtocolScreen = ({ onBack }) => {
                     onPress={openEndConfirm}
                   >
                     <View style={protocolScreenStyles.buttonContent}>
-                      <Text style={protocolScreenStyles.buttonIconSmall}>⏹️</Text>
-                      <Text style={protocolScreenStyles.buttonLabelOnButton}>Schicht beenden</Text>
+                      <View style={[protocolScreenStyles.buttonIconContainer, { backgroundColor: '#EF4444' }]}>
+                        <MaterialIcons name="stop" size={16} color="#ffffff" />
+                      </View>
+                      <Text style={protocolScreenStyles.buttonLabelOnButton} numberOfLines={1} ellipsizeMode={'tail'}>Schicht beenden</Text>
                     </View>
                   </AnimatedButton>
 
@@ -525,8 +563,8 @@ const ProtocolScreen = ({ onBack }) => {
                 </>
               )
             ) : (
-              // If in "störung" view, keep existing störung buttons layout (rows of 3)
-              lineButtonConfig[shiftData.selectedLine] && lineButtonConfig[shiftData.selectedLine].störung && renderButtons(lineButtonConfig[shiftData.selectedLine].störung)
+              // If in "störung" view, the selector is rendered above the table — nothing to render here
+              null
             )}
           </View>
         </View>
