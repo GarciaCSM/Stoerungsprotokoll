@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+/*import { StyleSheet } from 'react-native';
 
 // Dark Dashboard Theme (wie im Screenshot)
 const COLORS = {
@@ -686,4 +686,4 @@ export const protocolScreenStyles = StyleSheet.create({
     justifyContent: 'center',
     marginLeft: 12,
   },
-});
+});*/

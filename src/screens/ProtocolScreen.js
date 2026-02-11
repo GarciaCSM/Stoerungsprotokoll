@@ -1,54 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Animated, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ConfirmModal from '../components/ConfirmModal';
 import { useShift } from '../context/ShiftContext';
-import { protocolScreenStyles } from '../styles/ProtocolScreenStyles';
+import protocolScreenStyles from '../styles/ProtocolScreenStyles';
 import { lineButtonConfig } from '../config/lineButtonConfig';
-import { MaterialIcons, Feather } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import FAService from '../services/faService';
-
-// Colors for inline usage
-const COLORS = {
-  foreground: '#0F172A',
-};
-
-// Reusable animated button with press feedback
-const AnimatedButton = ({ children, onPress, accessibilityLabel, style }) => {
-  const scale = useRef(new Animated.Value(1)).current;
-  const onPressIn = () => Animated.spring(scale, { toValue: 0.96, friction: 6, useNativeDriver: true }).start();
-  const onPressOut = () => Animated.spring(scale, { toValue: 1, friction: 6, useNativeDriver: true }).start();
-
-  return (
-    <Animated.View style={{ transform: [{ scale }] }}>
-      <TouchableOpacity
-        accessibilityLabel={accessibilityLabel}
-        activeOpacity={0.95}
-        style={style}
-        onPressIn={onPressIn}
-        onPressOut={onPressOut}
-        onPress={onPress}
-      >
-        {children}
-      </TouchableOpacity>
-    </Animated.View>
-  );
-};
-
-// Minimal timer display (no animations)
-const TimerDisplay = ({ time = '00:00:00', status = null }) => {
-  const label = status === 'start' ? 'Läuft' : status === 'störung' ? 'Störung' : status === 'pause' ? 'Pause' : 'Bereit';
-  const chipStyle = status === 'start' ? protocolScreenStyles.timerChipGreen : status === 'störung' ? protocolScreenStyles.timerChipRed : status === 'pause' ? protocolScreenStyles.timerChipPause : protocolScreenStyles.timerChipNeutral;
-
-  return (
-    <View style={protocolScreenStyles.timerContainer}>
-      <Text style={protocolScreenStyles.timerText}>{time}</Text>
-      <View style={[protocolScreenStyles.timerChip, chipStyle, { marginTop: 12 }]}>
-        <Text style={protocolScreenStyles.timerChipText}>{label}</Text>
-      </View>
-    </View>
-  );
-};
 
 const ProtocolScreen = ({ onBack }) => {
   const { shiftData, updateShiftData } = useShift();
@@ -76,6 +34,13 @@ const ProtocolScreen = ({ onBack }) => {
   const stoerIntervalRef = useRef(null);
   // remember whether the main timer was running before starting a stör (so we can restore it on cancel)
   const prevRunningBeforeStoer = useRef(false);
+
+  // Pause tracking
+  const [pauseStart, setPauseStart] = useState(null); // timestamp ms
+  const [pauseRunning, setPauseRunning] = useState(false);
+  const [pauseElapsed, setPauseElapsed] = useState(0); // live pause seconds
+  const [totalPauseSeconds, setTotalPauseSeconds] = useState(0); // cumulative pause seconds
+  const pauseIntervalRef = useRef(null);
 
   const intervalRef = useRef(null);
   const mainTimerStartTime = useRef(null); // timestamp when main timer started (for persistence)
@@ -128,6 +93,32 @@ const ProtocolScreen = ({ onBack }) => {
       }
     };
   }, [stoerRunning, stoerStart]);
+
+  // Pause timer effect: track an active pause and update totalPauseSeconds while pausing
+  useEffect(() => {
+    if (pauseRunning) {
+      if (!pauseIntervalRef.current) {
+        pauseIntervalRef.current = setInterval(() => {
+          // keep a live counter in case UI wants to show pause duration
+          const now = Date.now();
+          setPauseElapsed(Math.round((now - pauseStart) / 1000));
+        }, 1000);
+      }
+    } else {
+      if (pauseIntervalRef.current) {
+        clearInterval(pauseIntervalRef.current);
+        pauseIntervalRef.current = null;
+      }
+      // clear live counter
+      setPauseElapsed(0);
+    }
+    return () => {
+      if (pauseIntervalRef.current) {
+        clearInterval(pauseIntervalRef.current);
+        pauseIntervalRef.current = null;
+      }
+    };
+  }, [pauseRunning, pauseStart]);
 
   const formatTime = (totalSeconds) => {
     const hrs = Math.floor(totalSeconds / 3600);
@@ -212,6 +203,15 @@ const ProtocolScreen = ({ onBack }) => {
             const stoerElapsedSec = Math.floor((now - timerState.stoerStart) / 1000);
             setStoerElapsed(stoerElapsedSec);
           }
+
+          // restore pause info
+          setTotalPauseSeconds(timerState.totalPauseSeconds || 0);
+          setPauseStart(timerState.pauseStart || null);
+          setPauseRunning(timerState.pauseRunning || false);
+          if (timerState.pauseRunning && timerState.pauseStart) {
+            const pElapsed = Math.floor((now - timerState.pauseStart) / 1000);
+            setPauseElapsed(pElapsed);
+          }
         }
       } catch (e) {
         console.warn('Failed to load timer state', e);
@@ -263,6 +263,10 @@ const ProtocolScreen = ({ onBack }) => {
         startTime: mainTimerStartTime.current,
         stoerStart,
         stoerRunning,
+        // pause info
+        pauseStart,
+        pauseRunning,
+        totalPauseSeconds,
       };
       await AsyncStorage.setItem('timer_state', JSON.stringify(timerState));
     } catch (e) {
@@ -273,7 +277,7 @@ const ProtocolScreen = ({ onBack }) => {
   // Auto-save timer state whenever relevant values change
   useEffect(() => {
     saveTimerState();
-  }, [elapsed, running, activeButton, selectedIssue, showStartOnly, stoerStart, stoerRunning]);
+  }, [elapsed, running, activeButton, selectedIssue, showStartOnly, stoerStart, stoerRunning, pauseStart, pauseRunning, totalPauseSeconds]);
 
   // Dev helper: clear all local logs (no confirmation) — used to quickly empty tables
   const clearAllLocalLogs = async () => {
@@ -304,6 +308,16 @@ const ProtocolScreen = ({ onBack }) => {
       prevRunningBeforeStoer.current = false;
     }
 
+    // if we're resuming from pause, add the pause duration to total and clear pause state
+    if (pauseRunning && pauseStart) {
+      const now = Date.now();
+      const added = Math.round((now - pauseStart) / 1000);
+      setTotalPauseSeconds(prev => prev + added);
+      setPauseRunning(false);
+      setPauseStart(null);
+      setPauseElapsed(0);
+    }
+
     setActiveButton('start');
     setRunning(true);
     // clear selected issue (resolved) and show full controls again
@@ -313,8 +327,28 @@ const ProtocolScreen = ({ onBack }) => {
   };
 
   const handlePause = () => {
-    setActiveButton('pause');
-    setRunning(false);
+    // start a pause period
+    if (!pauseRunning) {
+      setPauseStart(Date.now());
+      setPauseRunning(true);
+      setActiveButton('pause');
+      setRunning(false);
+    }
+  };
+
+  const handleCancelStoer = () => {
+    // Cancel current störung without saving a log and restore previous running state
+    if (stoerRunning) {
+      setStoerRunning(false);
+      setStoerStart(null);
+      setStoerElapsed(0);
+    }
+    setSelectedIssue(null);
+    setShowStartOnly(false);
+    setCurrentView('initial');
+    setActiveButton(prevRunningBeforeStoer.current ? 'start' : null);
+    if (prevRunningBeforeStoer.current) setRunning(true);
+    prevRunningBeforeStoer.current = false;
   };
 
   const handleStörungClick = () => {
@@ -411,7 +445,7 @@ const ProtocolScreen = ({ onBack }) => {
           </View>
           <View style={protocolScreenStyles.gridContainer}>
             {buttons.map((buttonLabel, index) => (
-              <AnimatedButton
+              <TouchableOpacity
                 key={index}
                 style={protocolScreenStyles.disturbanceCard}
                 onPress={() => handleIssueSelect(buttonLabel)}
@@ -420,7 +454,7 @@ const ProtocolScreen = ({ onBack }) => {
                   <MaterialIcons name="warning" size={20} color="#94A3B8" style={protocolScreenStyles.disturbanceIcon} />
                   <Text style={protocolScreenStyles.actionButtonText} numberOfLines={2} ellipsizeMode="tail">{buttonLabel}</Text>
                 </View>
-              </AnimatedButton>
+              </TouchableOpacity>
             ))}
           </View>
         </View>
@@ -520,8 +554,8 @@ const ProtocolScreen = ({ onBack }) => {
         {/* Dashboard Grid */}
         <View style={protocolScreenStyles.dashboardGrid}>
           
-          {/* Left Column: FA Section */}
-          <View style={protocolScreenStyles.faSectionCard}>
+          {/* FA Section - Full Width */}
+          <View style={protocolScreenStyles.faSectionCardFullWidth}>
             <Text style={protocolScreenStyles.sectionTitle}>FERTIGUNGSAUFTRAG</Text>
             
             {!selectedFA ? (
@@ -593,25 +627,22 @@ const ProtocolScreen = ({ onBack }) => {
             )}
           </View>
 
-          {/* Right Column */}
-          <View style={protocolScreenStyles.rightColumn}>
-            
-            {/* SOLL / IST Cards Row */}
-            <View style={protocolScreenStyles.sollIstRow}>
-              <View style={protocolScreenStyles.sollIstCard}>
-                <Text style={protocolScreenStyles.sollIstLabel}>SOLL</Text>
-                <Text style={protocolScreenStyles.sollIstValue}>0</Text>
-                <Text style={protocolScreenStyles.sollIstSubtext}>Stk/Std</Text>
-              </View>
-              <View style={protocolScreenStyles.sollIstCard}>
-                <Text style={protocolScreenStyles.sollIstLabel}>IST</Text>
-                <Text style={protocolScreenStyles.sollIstValue}>0</Text>
-                <Text style={protocolScreenStyles.sollIstSubtext}>Differenz: 0</Text>
-              </View>
+          {/* SOLL / IST Cards Row - Full Width */}
+          <View style={protocolScreenStyles.sollIstRow}>
+            <View style={protocolScreenStyles.sollIstCard}>
+              <Text style={protocolScreenStyles.sollIstLabel}>SOLL</Text>
+              <Text style={protocolScreenStyles.sollIstValue}>0</Text>
+              <Text style={protocolScreenStyles.sollIstSubtext}>Stk/Std</Text>
             </View>
+            <View style={protocolScreenStyles.sollIstCard}>
+              <Text style={protocolScreenStyles.sollIstLabel}>IST</Text>
+              <Text style={protocolScreenStyles.sollIstValue}>0</Text>
+              <Text style={protocolScreenStyles.sollIstSubtext}>Differenz: 0</Text>
+            </View>
+          </View>
 
-            {/* Zeitübersicht Card */}
-            <View style={protocolScreenStyles.zeitCard}>
+          {/* Zeitübersicht Card - Full Width */}
+          <View style={protocolScreenStyles.zeitCard}>
               <Text style={protocolScreenStyles.sectionTitle}>ZEITÜBERSICHT</Text>
               
               <View style={protocolScreenStyles.zeitRow}>
@@ -659,14 +690,12 @@ const ProtocolScreen = ({ onBack }) => {
 
               <View style={protocolScreenStyles.zeitRow}>
                 <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                  <MaterialIcons name="coffee" size={16} color="#F59E0B" style={{marginRight: 6}} />
+                  <MaterialIcons name="free-breakfast" size={16} color="#F59E0B" style={{marginRight: 6}} />
                   <Text style={[protocolScreenStyles.zeitLabel, {color: '#F59E0B'}]}>PAUSE KUM.</Text>
                 </View>
-                <Text style={[protocolScreenStyles.zeitValue, {color: '#F59E0B'}]}>0 Min</Text>
+                <Text style={[protocolScreenStyles.zeitValue, {color: '#F59E0B'}]}>{Math.floor(totalPauseSeconds / 60)} Min</Text>
               </View>
             </View>
-
-          </View>
         </View>
 
         {/* Additional Info Sections */}
@@ -694,42 +723,61 @@ const ProtocolScreen = ({ onBack }) => {
 
 
         {/* Action Buttons Section */}
-        {currentView === 'initial' && !showStartOnly && (
+        {currentView === 'initial' && (
           <View style={protocolScreenStyles.actionsSection}>
-            <View style={protocolScreenStyles.buttonsRow}>
-              <TouchableOpacity
-                style={[protocolScreenStyles.actionButton, protocolScreenStyles.startButton, activeButton === 'start' && protocolScreenStyles.actionButtonActive]}
-                onPress={handleStart}
-                disabled={activeButton === 'start'}
-              >
-                <MaterialIcons name="play-arrow" size={20} color="#fff" />
-                <Text style={protocolScreenStyles.actionButtonText}>Produktion starten</Text>
-              </TouchableOpacity>
+            {showStartOnly ? (
+              <View style={protocolScreenStyles.buttonsRow}>
+                <TouchableOpacity
+                  style={[protocolScreenStyles.actionButton, protocolScreenStyles.startButton]}
+                  onPress={handleStart}
+                >
+                  <MaterialIcons name="play-arrow" size={20} color="#fff" />
+                  <Text style={protocolScreenStyles.actionButtonText}>Produktion starten</Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[protocolScreenStyles.actionButton, protocolScreenStyles.stoerungButton, activeButton === 'störung' && protocolScreenStyles.actionButtonActive]}
-                onPress={handleStörungClick}
-              >
-                <MaterialIcons name="warning" size={20} color="#fff" />
-                <Text style={protocolScreenStyles.actionButtonText}>Störung melden</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[protocolScreenStyles.actionButton, protocolScreenStyles.modalCancel]}
+                  onPress={handleCancelStoer}
+                >
+                  <Text style={protocolScreenStyles.modalCancelText}>Abbrechen</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={protocolScreenStyles.buttonsRow}>
+                <TouchableOpacity
+                  style={[protocolScreenStyles.actionButton, protocolScreenStyles.startButton, activeButton === 'start' && protocolScreenStyles.actionButtonActive]}
+                  onPress={handleStart}
+                  disabled={activeButton === 'start'}
+                >
+                  <MaterialIcons name="play-arrow" size={20} color="#fff" />
+                  <Text style={protocolScreenStyles.actionButtonText}>Produktion starten</Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[protocolScreenStyles.actionButton, protocolScreenStyles.pauseButton, activeButton === 'pause' && protocolScreenStyles.actionButtonActive]}
-                onPress={handlePause}
-              >
-                <MaterialIcons name="pause" size={20} color="#fff" />
-                <Text style={protocolScreenStyles.actionButtonText}>Pause setzen</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[protocolScreenStyles.actionButton, protocolScreenStyles.stoerungButton, activeButton === 'störung' && protocolScreenStyles.actionButtonActive]}
+                  onPress={handleStörungClick}
+                >
+                  <MaterialIcons name="warning" size={20} color="#fff" />
+                  <Text style={protocolScreenStyles.actionButtonText}>Störung melden</Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[protocolScreenStyles.actionButton, protocolScreenStyles.endeButton]}
-                onPress={openEndConfirm}
-              >
-                <MaterialIcons name="stop" size={20} color="#fff" />
-                <Text style={protocolScreenStyles.actionButtonText}>Schicht beenden</Text>
-              </TouchableOpacity>
-            </View>
+                <TouchableOpacity
+                  style={[protocolScreenStyles.actionButton, protocolScreenStyles.pauseButton, activeButton === 'pause' && protocolScreenStyles.actionButtonActive]}
+                  onPress={handlePause}
+                >
+                  <MaterialIcons name="pause" size={20} color="#fff" />
+                  <Text style={protocolScreenStyles.actionButtonText}>Pause setzen</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[protocolScreenStyles.actionButton, protocolScreenStyles.endeButton]}
+                  onPress={openEndConfirm}
+                >
+                  <MaterialIcons name="stop" size={20} color="#fff" />
+                  <Text style={protocolScreenStyles.actionButtonText}>Schicht beenden</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
 

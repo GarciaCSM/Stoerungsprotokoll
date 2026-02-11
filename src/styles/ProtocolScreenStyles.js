@@ -33,7 +33,7 @@ const COLORS = {
   brutto: '#64748B',
 };
 
-export const protocolScreenStyles = StyleSheet.create({
+const protocolScreenStyles = StyleSheet.create({
   // Main Container
   container: {
     flex: 1,
@@ -87,7 +87,7 @@ export const protocolScreenStyles = StyleSheet.create({
 
   // Dashboard Grid Layout
   dashboardGrid: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: 16,
     marginBottom: 16,
   },
@@ -96,15 +96,24 @@ export const protocolScreenStyles = StyleSheet.create({
     gap: 16,
   },
 
-  // FA-Section Card (links oben)
-  faSection: {
+  // FA-Section Card - Full Width
+  faSectionCardFullWidth: {
     backgroundColor: COLORS.card,
     borderRadius: 12,
     padding: 20,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  faSectionTitle: {
+  faSectionCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  
+  // Section Title
+  sectionTitle: {
     fontSize: 11,
     fontWeight: '700',
     color: COLORS.foregroundMuted,
@@ -230,39 +239,6 @@ export const protocolScreenStyles = StyleSheet.create({
     marginLeft: 8,
   },
 
-  // Status Badge (BEREIT)
-  statusBadge: {
-    backgroundColor: COLORS.success,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-    marginBottom: 16,
-  },
-  statusBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-
-  // Production Start Button (grün, groß)
-  productionStartButton: {
-    backgroundColor: COLORS.success,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 8,
-    gap: 10,
-  },
-  productionStartButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-
   // SOLL/IST Cards
   sollIstRow: {
     flexDirection: 'row',
@@ -344,44 +320,7 @@ export const protocolScreenStyles = StyleSheet.create({
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
   },
-  zeitValueHighlight: {
-    color: COLORS.netto,
-  },
-  zeitValueWarning: {
-    color: COLORS.danger,
-  },
-  zeitValueInfo: {
-    color: COLORS.warning,
-  },
 
-  // Buttons Row (Störung, etc.)
-  buttonsRowCentered: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 20,
-    marginBottom: 16,
-  },
-  buttonSize: {
-    minWidth: 140,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  buttonLabelOnButton: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  
   // Action Buttons
   actionButton: {
     flex: 1,
@@ -684,20 +623,6 @@ export const protocolScreenStyles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Utility
-  timerCenteredContainer: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  timerContainer: {
-    alignItems: 'center',
-  },
-  timerText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.foreground,
-    fontVariant: ['tabular-nums'],
-  },
 
   // Right Column (for dashboard grid layout)
   rightColumn: {
@@ -741,46 +666,9 @@ export const protocolScreenStyles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Production Start Text (alias for productionStartButtonText)
-  productionStartText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-
-  // Zeit Label/Value (simplified for zeitCard)
-  zeitLabel: {
-    fontSize: 13,
-    color: COLORS.foregroundMuted,
-    fontWeight: '500',
-  },
-  zeitValue: {
-    fontSize: 15,
-    color: COLORS.foreground,
-    fontWeight: '600',
-    fontVariant: ['tabular-nums'],
-  },
-
-  // SOLL/IST Label (simplified)
-  sollIstLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.foregroundMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 12,
-  },
-
   // Action Button Active State
   actionButtonActive: {
     opacity: 0.7,
-  },
-
-  // Ende Button Text
-  endeButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
   },
 });
 

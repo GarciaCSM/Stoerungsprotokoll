@@ -1,6 +1,6 @@
 import React from 'react';
 import { Modal, View, Text, TouchableOpacity } from 'react-native';
-import { protocolScreenStyles } from '../styles/ProtocolScreenStyles';
+import protocolScreenStyles from '../styles/ProtocolScreenStyles';
 
 const ConfirmModal = ({ visible, title = 'Bestätigen', message = 'Bist du sicher?', onCancel, onConfirm }) => {
   return (
