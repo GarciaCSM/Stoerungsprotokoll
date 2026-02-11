@@ -1,263 +1,460 @@
 import { StyleSheet } from 'react-native';
 
-// Modern color palette based on screenshots
+// Dark Dashboard Theme
 const COLORS = {
-  background: '#F8FAFC',
-  card: '#FFFFFF',
-  border: '#E2E8F0',
-  success: '#10B981',
+  // Dark Background
+  background: '#1E293B',
+  backgroundLight: '#2D3B4E',
+  card: '#334155',
+  cardHover: '#3B4A5F',
+  
+  // Borders
+  border: '#475569',
+  borderLight: '#64748B',
+  
+  // Text
+  foreground: '#F1F5F9',
+  foregroundMuted: '#94A3B8',
+  foregroundDim: '#64748B',
+  
+  // Status Colors
+  success: '#22C55E',
+  successDark: '#16A34A',
   warning: '#F59E0B',
+  danger: '#EF4444',
   info: '#3B82F6',
-  destructive: '#EF4444',
-  muted: '#F1F5F9',
-  mutedForeground: '#64748B',
-  foreground: '#0F172A',
+  
+  // Accent
+  primary: '#3B82F6',
+  primaryHover: '#2563EB',
+  
+  // Special
+  netto: '#10B981',
+  brutto: '#64748B',
 };
 
 export const protocolScreenStyles = StyleSheet.create({
-  // Container
+  // Main Container
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
   contentContainer: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    padding: 20,
   },
 
-  // Header
-  titleInfoRow: {
-    fontSize: 18,
-    fontWeight: '600',
+  // Header Bar
+  headerBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingHorizontal: 4,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  appIcon: {
+    width: 40,
+    height: 40,
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitleGroup: {
+    flexDirection: 'column',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
     color: COLORS.foreground,
-    textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 8,
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: COLORS.mutedForeground,
-    textAlign: 'center',
-    marginBottom: 24,
+    fontSize: 13,
+    color: COLORS.foregroundMuted,
+    marginTop: 2,
+  },
+  headerTime: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: COLORS.foreground,
+    letterSpacing: 2,
   },
 
-  // Timer Card
-  timerCard: {
+  // Dashboard Grid Layout
+  dashboardGrid: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 16,
+  },
+  dashboardColumn: {
+    flex: 1,
+    gap: 16,
+  },
+
+  // FA-Section Card (links oben)
+  faSection: {
     backgroundColor: COLORS.card,
-    borderRadius: 16,
-    padding: 32,
-    marginBottom: 24,
-    marginHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  faSectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.foregroundMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 16,
+  },
+
+  // FA Search
+  faSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 12,
+  },
+  faSearchInput: {
+    flex: 1,
+    backgroundColor: COLORS.backgroundLight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: COLORS.foreground,
+  },
+  faSearchButton: {
+    backgroundColor: COLORS.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderRadius: 8,
+    gap: 6,
+  },
+  faSearchButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  faSearchError: {
+    color: COLORS.danger,
+    fontSize: 13,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+
+  // FA Results
+  faResultsContainer: {
+    backgroundColor: COLORS.backgroundLight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    marginTop: 8,
+    maxHeight: 220,
+  },
+  faResultsTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.foregroundMuted,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  faResultsList: {
+    maxHeight: 180,
+  },
+  faResultItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  faResultFANr: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.foreground,
+    marginBottom: 4,
+  },
+  faResultArtikel: {
+    fontSize: 12,
+    color: COLORS.foregroundMuted,
+  },
+
+  // Selected FA Display
+  faSelectedContainer: {
+    backgroundColor: COLORS.backgroundLight,
+    borderWidth: 1,
+    borderColor: COLORS.success,
+    borderRadius: 8,
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  faSelectedContent: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 12,
+  },
+  faSelectedLabel: {
+    fontSize: 10,
+    color: COLORS.foregroundMuted,
+    fontWeight: '600',
+    marginBottom: 3,
+    textTransform: 'uppercase',
+  },
+  faSelectedValue: {
+    fontSize: 13,
+    color: COLORS.foreground,
+    fontWeight: '500',
+  },
+  faRemoveButton: {
+    backgroundColor: COLORS.danger,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+
+  // Status Badge (BEREIT)
+  statusBadge: {
+    backgroundColor: COLORS.success,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+  },
+  statusBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  // Production Start Button (grün, groß)
+  productionStartButton: {
+    backgroundColor: COLORS.success,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 8,
+    gap: 10,
+  },
+  productionStartButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // SOLL/IST Cards
+  sollIstRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 16,
+  },
+  sollIstCard: {
+    flex: 1,
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 20,
     borderWidth: 1,
     borderColor: COLORS.border,
     alignItems: 'center',
   },
-  timerContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+  sollIstTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.foregroundMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 12,
   },
-  timerText: {
+  sollIstValue: {
     fontSize: 64,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: COLORS.foreground,
-    letterSpacing: -2,
+    lineHeight: 64,
   },
-
-  // Status Badge
-  timerChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    marginTop: 12,
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  timerChipText: {
+  sollIstSubtext: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  timerChipGreen: {
-    backgroundColor: COLORS.success,
-  },
-  timerChipRed: {
-    backgroundColor: COLORS.warning,
-  },
-  timerChipPause: {
-    backgroundColor: COLORS.info,
-  },
-  timerChipNeutral: {
-    backgroundColor: COLORS.muted,
-  },
-
-  // Active Disruption Display
-  selectedIssueText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.warning,
-    marginTop: 12,
-    textAlign: 'center',
-  },
-  stoerTimerText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.warning,
+    color: COLORS.foregroundMuted,
     marginTop: 8,
-    textAlign: 'center',
+  },
+  sollIstDiff: {
+    fontSize: 13,
+    color: COLORS.foregroundMuted,
+    marginTop: 4,
   },
 
-  // Action Buttons (Main 4 buttons)
+  // Zeitübersicht Card
+  zeitCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  zeitTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.foregroundMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 16,
+  },
+  zeitRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  zeitRowLast: {
+    marginBottom: 0,
+  },
+  zeitLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  zeitLabelText: {
+    fontSize: 13,
+    color: COLORS.foregroundMuted,
+    fontWeight: '500',
+  },
+  zeitValue: {
+    fontSize: 15,
+    color: COLORS.foreground,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  zeitValueHighlight: {
+    color: COLORS.netto,
+  },
+  zeitValueWarning: {
+    color: COLORS.danger,
+  },
+  zeitValueInfo: {
+    color: COLORS.warning,
+  },
+
+  // Buttons Row (Störung, etc.)
   buttonsRowCentered: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 12,
+    gap: 12,
     marginTop: 20,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   buttonSize: {
-    width: 230,
-    height: 40,
+    minWidth: 140,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 12,
-    marginHorizontal: 6,
-    paddingHorizontal: 10,
   },
   buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonIconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 0,
-  },
-  iconStartOutline: {
-    width: 26,
-    height: 26,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 6,
-    backgroundColor: 'transparent',
-  },
-  iconWarn: {
-    backgroundColor: '#ffffff',
-  },
-  iconPause: {
-    backgroundColor: '#ffffff',
-  },
-  iconEnde: {
-    backgroundColor: '#ffffff',
+    gap: 8,
   },
   buttonLabelOnButton: {
-    color: '#ffffff',
+    color: '#FFFFFF',
     fontSize: 15,
-    lineHeight: 18,
     fontWeight: '600',
+  },
+  
+  // Action Buttons
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 8,
+    minHeight: 48,
+  },
+  actionButtonText: {
+    fontSize: 13,
+    color: '#FFFFFF',
     textAlign: 'center',
+    fontWeight: '600',
   },
   startButton: {
     backgroundColor: COLORS.success,
-    shadowColor: COLORS.success,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 3,
   },
-  actionButton: {
+  stoerungButton: {
     backgroundColor: COLORS.warning,
-    shadowColor: COLORS.warning,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 3,
   },
   pauseButton: {
     backgroundColor: COLORS.info,
-    shadowColor: COLORS.info,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 3,
   },
   endeButton: {
-    backgroundColor: COLORS.destructive,
-    shadowColor: COLORS.destructive,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 3,
+    backgroundColor: COLORS.danger,
   },
 
-  // Disruption Selection Buttons
-  responsiveButtonContainer: {
+  // Störung Selector Grid
+  gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    paddingHorizontal: 12,
-    marginBottom: 16,
+    gap: 12,
+    marginTop: 12,
   },
-  buttonResponsive: {
-    width: '30%',
-    minWidth: 100,
+  disturbanceCard: {
+    width: '31%',
+    minWidth: 160,
+    maxWidth: '32%',
     backgroundColor: COLORS.card,
-    borderWidth: 2,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    padding: 16,
-    margin: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 90,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-
-  // Modal-like selector when choosing a störung
-  modalSelectCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 16,
-    padding: 16,
-    marginHorizontal: 'auto',
-    marginBottom: 18,
     borderWidth: 1,
     borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 3,
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    minHeight: 90,
+  },
+  disturbanceIcon: {
+    marginBottom: 8,
+  },
+
+  // Modal für Störungsauswahl
+  modalSelectCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 20,
+    marginHorizontal: 'auto',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     alignSelf: 'center',
-    maxWidth: 800,
+    maxWidth: 900,
     width: '90%',
   },
   modalHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   modalTitle: {
     fontSize: 16,
@@ -265,179 +462,117 @@ export const protocolScreenStyles = StyleSheet.create({
     color: COLORS.foreground,
   },
   modalClose: {
-    fontSize: 18,
-    color: COLORS.mutedForeground,
-  },
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  disturbanceCard: {
-    width: '31%',
-    minWidth: 240,
-    maxWidth: '32%',
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    marginBottom: 12,
-    marginRight: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 90,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  disturbanceIcon: {
-    marginBottom: 6,
-  },
-  actionButtonText: {
-    fontSize: 13,
+    fontSize: 20,
+    color: COLORS.foregroundMuted,
     fontWeight: '600',
-    color: COLORS.foreground,
-    textAlign: 'center',
-    marginTop: 4,
-    lineHeight: 16,
+    padding: 4,
   },
 
-  // Summary Grid (overview)
-  summaryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 12,
-  },
-  summaryCard: {
-    width: '32%',
-    minWidth: 140,
-    backgroundColor: COLORS.muted,
-    borderRadius: 12,
-    paddingVertical: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  summaryCount: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: COLORS.foreground,
-    marginBottom: 6,
-  },
-  summaryLabel: {
-    fontSize: 13,
-    color: COLORS.mutedForeground,
-    textAlign: 'center',
-  },
-  summaryTime: {
-    fontSize: 12,
-    color: COLORS.mutedForeground,
-    textAlign: 'center',
-    marginTop: 6,
-    fontWeight: '600',
-  },
-
-  // Table Container
-  tableContainer: {
-    backgroundColor: COLORS.card,
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    alignSelf: 'center',
-    maxWidth: 760,
-    width: '92%',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  tableTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.foreground,
-    marginBottom: 6,
-  },
-  tableTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-
-  // Tabs
-  tabRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 0,
-    paddingTop: 0,
-    backgroundColor: 'transparent',
-    marginBottom: 0,
-  },
-  tabButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    backgroundColor: 'transparent',
-    marginRight: 4,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  tabActive: {
-    borderBottomColor: COLORS.foreground,
-  },
-  tabText: {
+  // Störung Timer
+  stoerTimerText: {
     fontSize: 14,
     fontWeight: '600',
-    color: COLORS.mutedForeground,
+    color: COLORS.warning,
+    textAlign: 'center',
+    marginTop: 12,
+  },
+  selectedIssueText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.foreground,
+    textAlign: 'center',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  sonstigesInput: {
+    backgroundColor: COLORS.backgroundLight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: COLORS.foreground,
+    marginTop: 12,
+    minHeight: 80,
+    textAlignVertical: 'top',
   },
 
-  // Table
+  // Protokoll Tabelle
+  tableTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 24,
+    marginBottom: 12,
+  },
+  tableTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.foreground,
+  },
+  smallDangerButton: {
+    color: COLORS.danger,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  
+  tabRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    gap: 8,
+  },
+  tabButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: COLORS.backgroundLight,
+  },
+  tabActive: {
+    backgroundColor: COLORS.primary,
+  },
+  tabText: {
+    fontSize: 13,
+    color: COLORS.foregroundMuted,
+    fontWeight: '500',
+  },
+
+  tableContainer: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 16,
+    maxWidth: 760,
+    width: '92%',
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: COLORS.muted,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
   tableHeaderCell: {
     flex: 1,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
-    color: COLORS.mutedForeground,
+    color: COLORS.foregroundMuted,
     textAlign: 'center',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   tableHeaderCellLeft: {
-    flex: 1,
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.mutedForeground,
     textAlign: 'left',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    paddingLeft: 12,
+  },
+  tableScroll: {
+    maxHeight: 256,
   },
   tableRow: {
     flexDirection: 'row',
     paddingVertical: 10,
-    paddingHorizontal: 14,
+    minHeight: 52,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    minHeight: 52, // slightly smaller row height
   },
   tableCell: {
     flex: 1,
@@ -446,133 +581,97 @@ export const protocolScreenStyles = StyleSheet.create({
     textAlign: 'center',
   },
   tableCellLeft: {
-    flex: 1,
     fontSize: 15,
     color: COLORS.foreground,
+    fontWeight: '500',
     textAlign: 'left',
-    fontWeight: '600',
-    paddingLeft: 12,
   },
   tableNote: {
-    fontSize: 13,
-    color: COLORS.mutedForeground,
+    fontSize: 12,
+    color: COLORS.foregroundMuted,
     marginTop: 4,
     fontStyle: 'italic',
   },
   tableEmpty: {
-    padding: 24,
-    alignItems: 'center',
-  },
-  tableEmptyText: {
-    fontSize: 15,
-    color: COLORS.mutedForeground,
-  },
-  tableScroll: {
-    // show exactly 4 rows and then make the rest scrollable (using new row height)
-    maxHeight: 52 * 4 + 48, // 4 * minHeight + header spacing (approx)
-    maxHeight: 256,
-  },
-
-  // Clear Logs Button
-  smallDangerButton: {
-    fontSize: 13,
-    color: COLORS.destructive,
-    fontWeight: '600',
-    padding: 0,
-  },
-
-  // Sonstiges Input
-  sonstigesInput: {
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 8,
-    padding: 12,
+    textAlign: 'center',
+    color: COLORS.foregroundMuted,
     fontSize: 14,
-    color: COLORS.foreground,
-    minHeight: 48,
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 16,
-  },
-  sonstigesContainer: {
-    paddingHorizontal: 16,
-    marginTop: 16,
+    paddingVertical: 24,
   },
 
-  // Back Button
-  backButton: {
+  // Summary Grid
+  summaryGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-end',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    backgroundColor: COLORS.card,
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  summaryCard: {
+    flex: 1,
+    minWidth: 120,
+    backgroundColor: COLORS.backgroundLight,
     borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: COLORS.border,
-    marginTop: 16,
-    marginHorizontal: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  backButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.mutedForeground,
-  },
-
-  // Modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  modalContainer: {
-    width: '100%',
-    maxWidth: 420,
-    backgroundColor: COLORS.card,
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 16,
-  },
-  modalTitle: {
-    fontSize: 18,
+  summaryCount: {
+    fontSize: 32,
     fontWeight: '700',
     color: COLORS.foreground,
+    marginBottom: 4,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    color: COLORS.foregroundMuted,
+    textAlign: 'center',
     marginBottom: 8,
   },
-  modalMessage: {
-    fontSize: 15,
-    color: COLORS.mutedForeground,
-    marginBottom: 20,
-    lineHeight: 22,
+  summaryTime: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.warning,
   },
-  modalButtonsRow: {
+
+  // Confirm Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 24,
+    width: '80%',
+    maxWidth: 400,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalText: {
+    fontSize: 16,
+    color: COLORS.foreground,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modalButtons: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 12,
   },
   modalButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 8,
-    marginLeft: 12,
+    alignItems: 'center',
   },
   modalCancel: {
-    backgroundColor: COLORS.muted,
+    backgroundColor: COLORS.backgroundLight,
   },
   modalConfirm: {
-    backgroundColor: COLORS.destructive,
+    backgroundColor: COLORS.danger,
   },
   modalCancelText: {
     color: COLORS.foreground,
@@ -584,4 +683,105 @@ export const protocolScreenStyles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
   },
+
+  // Utility
+  timerCenteredContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  timerContainer: {
+    alignItems: 'center',
+  },
+  timerText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.foreground,
+    fontVariant: ['tabular-nums'],
+  },
+
+  // Right Column (for dashboard grid layout)
+  rightColumn: {
+    flex: 1,
+  },
+
+  // Actions Section
+  actionsSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  buttonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+
+  // Störung Modal (selection screen)
+  stoerungModal: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 20,
+    margin: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  // Logs Section
+  logsSection: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 20,
+    margin: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  // Tab Text Active
+  tabTextActive: {
+    color: COLORS.foreground,
+    fontWeight: '600',
+  },
+
+  // Production Start Text (alias for productionStartButtonText)
+  productionStartText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // Zeit Label/Value (simplified for zeitCard)
+  zeitLabel: {
+    fontSize: 13,
+    color: COLORS.foregroundMuted,
+    fontWeight: '500',
+  },
+  zeitValue: {
+    fontSize: 15,
+    color: COLORS.foreground,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+
+  // SOLL/IST Label (simplified)
+  sollIstLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.foregroundMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 12,
+  },
+
+  // Action Button Active State
+  actionButtonActive: {
+    opacity: 0.7,
+  },
+
+  // Ende Button Text
+  endeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
 });
+
+export default protocolScreenStyles;
