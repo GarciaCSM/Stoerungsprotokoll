@@ -53,13 +53,79 @@ const protocolScreenStyles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 12,
     paddingHorizontal: 4,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+
+  // Compact top selection bar (line / leader / shift)
+  topSelectionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 16,
+    paddingHorizontal: 20,          // align with card padding
+  },
+  selectionGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  selectionChip: {
+    backgroundColor: '#0E2940',
+    borderWidth: 1,
+    borderColor: '#123246',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    minWidth: 110,
+    alignItems: 'flex-start',
+  },
+  selectionLabelSmall: {
+    fontSize: 9,
+    color: COLORS.foregroundMuted,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  selectionValueSmall: {
+    fontSize: 12,
+    color: COLORS.foreground,
+    fontWeight: '600',
+  },
+  confirmSmallButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginRight: 8,                 // spacing from right edge
+  },
+  confirmSmallButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  selectionSummarySmall: {
+    backgroundColor: COLORS.backgroundLight,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  editSelectionText: {
+    color: COLORS.foregroundMuted,
+    fontSize: 12,
+    marginRight: 8,                // spacing from right edge
   },
   appIcon: {
     width: 40,
@@ -431,6 +497,16 @@ const protocolScreenStyles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     fontWeight: '600',
+  },
+  // Disabled state for primary action (greyed out)
+  actionButtonDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.03)',
+    opacity: 0.5,
+  },
+  actionButtonTextDisabled: {
+    color: 'rgba(241,245,249,0.48)',
   },
   startButton: {
     backgroundColor: COLORS.success,

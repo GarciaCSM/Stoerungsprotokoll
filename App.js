@@ -1,11 +1,11 @@
 import React from 'react';
-import HomeScreen from './src/screens/HomeScreen';
+import ProtocolScreen from './src/screens/ProtocolScreen';
 import { ShiftProvider } from './src/context/ShiftContext';
 
 export default function App() {
   return (
     <ShiftProvider>
-      <HomeScreen />
+      <ProtocolScreen onBack={() => { /* no-op: HomeScreen removed */ }} />
     </ShiftProvider>
   );
 }

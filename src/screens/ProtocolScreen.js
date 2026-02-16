@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ConfirmModal from '../components/ConfirmModal';
 import { useShift } from '../context/ShiftContext';
@@ -11,6 +11,17 @@ import FAService from '../services/faService';
 const ProtocolScreen = ({ onBack }) => {
   const { shiftData, updateShiftData } = useShift();
   const [currentView, setCurrentView] = useState('initial'); // 'initial' oder 'störung'
+
+  // Top-selection state (moved from HomeScreen)
+  const [localLine, setLocalLine] = useState(shiftData.selectedLine || null);
+  const [localLeader, setLocalLeader] = useState(shiftData.selectedLeader || null);
+  const [localShift, setLocalShift] = useState(shiftData.selectedShift || null);
+  const [selectionConfirmed, setSelectionConfirmed] = useState(!!(shiftData.selectedLine && shiftData.selectedLeader && shiftData.selectedShift));
+  const [openSelectModal, setOpenSelectModal] = useState(null); // 'line' | 'leader' | 'shift' | null
+
+  // Line lock state: prevents accidental line changes. Persisted to AsyncStorage as 'assigned_line_locked'
+  const [lineLocked, setLineLocked] = useState(false);
+  const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
 
   // Timer state
   const [elapsed, setElapsed] = useState(0); // seconds
@@ -47,14 +58,20 @@ const ProtocolScreen = ({ onBack }) => {
 
   useEffect(() => {
     if (running) {
-      // if starting, set start time
+      // if starting, set start time (use numeric coercion to be robust)
       if (!mainTimerStartTime.current) {
         mainTimerStartTime.current = Date.now() - (elapsed * 1000);
       }
       if (!intervalRef.current) {
         intervalRef.current = setInterval(() => {
           const now = Date.now();
-          const newElapsed = Math.floor((now - mainTimerStartTime.current) / 1000);
+          const startNum = Number(mainTimerStartTime.current) || 0;
+          const diffMs = now - startNum;
+          if (diffMs < 0) {
+            // defensive: if stored start time is in the future, clamp to 0 and log
+            console.warn('[Timer] startTime is in the future — clamping elapsed to 0', startNum);
+          }
+          const newElapsed = Math.max(0, Math.floor(diffMs / 1000));
           setElapsed(newElapsed);
         }, 1000);
       }
@@ -77,7 +94,10 @@ const ProtocolScreen = ({ onBack }) => {
     if (stoerRunning) {
       if (!stoerIntervalRef.current) {
         stoerIntervalRef.current = setInterval(() => {
-          setStoerElapsed(Math.round((Date.now() - stoerStart) / 1000));
+          const now = Date.now();
+          const startNum = Number(stoerStart) || 0;
+          const sec = Math.max(0, Math.round((now - startNum) / 1000));
+          setStoerElapsed(sec);
         }, 1000);
       }
     } else {
@@ -101,7 +121,8 @@ const ProtocolScreen = ({ onBack }) => {
         pauseIntervalRef.current = setInterval(() => {
           // keep a live counter in case UI wants to show pause duration
           const now = Date.now();
-          setPauseElapsed(Math.round((now - pauseStart) / 1000));
+          const startNum = Number(pauseStart) || 0;
+          setPauseElapsed(Math.max(0, Math.round((now - startNum) / 1000)));
         }, 1000);
       }
     } else {
@@ -121,9 +142,10 @@ const ProtocolScreen = ({ onBack }) => {
   }, [pauseRunning, pauseStart]);
 
   const formatTime = (totalSeconds) => {
-    const hrs = Math.floor(totalSeconds / 3600);
-    const mins = Math.floor((totalSeconds % 3600) / 60);
-    const secs = totalSeconds % 60;
+    const s = Math.max(0, Number(totalSeconds) || 0);
+    const hrs = Math.floor(s / 3600);
+    const mins = Math.floor((s % 3600) / 60);
+    const secs = s % 60;
     const two = (n) => n.toString().padStart(2, '0');
     return `${two(hrs)}:${two(mins)}:${two(secs)}`;
   };
@@ -134,10 +156,18 @@ const ProtocolScreen = ({ onBack }) => {
   // View mode: 'logs' (default table) or 'summary' (aggregated view)
   const [viewMode, setViewMode] = useState('logs');
 
+  // Helper: per-selection pause key (pauses tracked per line+shift)
+  const getPauseKey = (line, shift) => `pause_total:${line || 'none'}:${shift || 'none'}`;
+
+
   // Compute summary (count and total duration) for possible issues for current line/shift
+  // effective selection used when editing (local) vs confirmed (shiftData)
+  const effectiveLine = selectionConfirmed ? shiftData.selectedLine : localLine;
+  const effectiveShift = selectionConfirmed ? shiftData.selectedShift : localShift;
+
   const computeIssueSummary = () => {
-    // prefer configured issues for the selected line; fall back to unique issues seen in today's logs
-    const cfg = lineButtonConfig[shiftData.selectedLine] && lineButtonConfig[shiftData.selectedLine].störung ? lineButtonConfig[shiftData.selectedLine].störung : [];
+    // prefer configured issues for the effective line; fall back to unique issues seen in today's logs
+    const cfg = lineButtonConfig[effectiveLine] && lineButtonConfig[effectiveLine].störung ? lineButtonConfig[effectiveLine].störung : [];
     const issues = cfg && cfg.length ? cfg : [...new Set(localLogs.map(l => l.issue).filter(Boolean))];
     return issues.map((label) => {
       const entries = localLogs.filter(e => e.issue === label);
@@ -152,13 +182,18 @@ const ProtocolScreen = ({ onBack }) => {
       const key = 'local_logs';
       const raw = await AsyncStorage.getItem(key);
       const existing = raw ? JSON.parse(raw) : [];
-      // filter to today's entries, current line and selected shift
+
+      // determine effective selection (while editing use local values, otherwise use persisted shiftData)
+      const effectiveLine = selectionConfirmed ? shiftData.selectedLine : localLine;
+      const effectiveShift = selectionConfirmed ? shiftData.selectedShift : localShift;
+
+      // filter to today's entries and the effective line/shift selection
       const today = new Date().toDateString();
       const todays = existing.filter((e) => {
         const isToday = new Date(e.createdAt).toDateString() === today;
-        const sameLine = e.line === shiftData.selectedLine;
-        const sameShift = (shiftData.selectedShift && (e.shift_type === shiftData.selectedShift || e.shift === shiftData.selectedShift));
-        return isToday && sameLine && (shiftData.selectedShift ? sameShift : true);
+        const sameLine = effectiveLine ? e.line === effectiveLine : true;
+        const sameShift = effectiveShift ? (e.shift_type === effectiveShift || e.shift === effectiveShift) : true;
+        return isToday && sameLine && sameShift;
       });
       setLocalLogs(todays.reverse()); // latest first
     } catch (e) {
@@ -169,7 +204,60 @@ const ProtocolScreen = ({ onBack }) => {
   useEffect(() => {
     // load local logs on mount and whenever selected line or shift changes
     loadLocalLogs();
-  }, [shiftData.selectedLine, shiftData.selectedShift]);
+
+    // load pause totals for the newly selected line+shift (pause is scoped per selection)
+    (async () => {
+      try {
+        const key = getPauseKey(shiftData.selectedLine, shiftData.selectedShift);
+        const stored = await AsyncStorage.getItem(key);
+        setTotalPauseSeconds(stored != null ? Number(stored) : 0);
+
+        // if timer_state contains an active pause for this exact selection, restore it
+        const timerStateRaw = await AsyncStorage.getItem('timer_state');
+        if (timerStateRaw) {
+          const ts = JSON.parse(timerStateRaw);
+          if (ts.pauseRunning && ts.pauseLine === shiftData.selectedLine && ts.pauseShift === shiftData.selectedShift) {
+            setPauseStart(Number(ts.pauseStart) || Date.now());
+            setPauseRunning(true);
+          } else {
+            setPauseRunning(false);
+            setPauseStart(null);
+            setPauseElapsed(0);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load pause totals for selection', e);
+      }
+    })();
+  }, [shiftData.selectedLine, shiftData.selectedShift, localLine, localShift, selectionConfirmed]);
+
+  // Load persisted assignment (moved behavior from HomeScreen)
+  useEffect(() => {
+    (async () => {
+      try {
+        const assigned = await AsyncStorage.getItem('assigned_line');
+        const leader = await AsyncStorage.getItem('assigned_leader');
+        const shift = await AsyncStorage.getItem('assigned_shift');
+        const locked = await AsyncStorage.getItem('assigned_line_locked');
+
+        if (assigned) setLocalLine(assigned);
+        if (leader) setLocalLeader(leader);
+        if (shift) setLocalShift(shift);
+
+        // default: if an assigned line exists, keep it locked unless explicitly unlocked
+        if (locked === 'false') setLineLocked(false);
+        else if (locked === 'true') setLineLocked(true);
+        else if (assigned) setLineLocked(true);
+
+        if (assigned && leader && shift) {
+          updateShiftData({ selectedLine: assigned, selectedLeader: leader, selectedShift: shift });
+          setSelectionConfirmed(true);
+        }
+      } catch (e) {
+        console.warn('Failed to load persisted assignment in ProtocolScreen', e);
+      }
+    })();
+  }, []);
 
   // Load timer state from AsyncStorage on mount
   useEffect(() => {
@@ -181,14 +269,22 @@ const ProtocolScreen = ({ onBack }) => {
           const now = Date.now();
           // restore state
           if (timerState.running && timerState.startTime) {
-            const elapsedMs = now - timerState.startTime;
-            const elapsedSec = Math.floor(elapsedMs / 1000);
-            mainTimerStartTime.current = timerState.startTime;
-            setElapsed(elapsedSec);
+            const startNum = Number(timerState.startTime);
+            if (isNaN(startNum)) {
+              console.warn('[Timer] invalid stored startTime — resetting to now');
+              mainTimerStartTime.current = Date.now();
+              setElapsed(0);
+            } else {
+              const elapsedMs = now - startNum;
+              if (elapsedMs < 0) console.warn('[Timer] stored startTime is in the future — clamping elapsed to 0', startNum);
+              const elapsedSec = Math.max(0, Math.floor(elapsedMs / 1000));
+              mainTimerStartTime.current = startNum;
+              setElapsed(elapsedSec);
+            }
             setRunning(true);
             setActiveButton(timerState.activeButton || 'start');
           } else {
-            setElapsed(timerState.elapsed || 0);
+            setElapsed(Math.max(0, timerState.elapsed || 0));
             setRunning(false);
             setActiveButton(timerState.activeButton || null);
           }
@@ -198,20 +294,40 @@ const ProtocolScreen = ({ onBack }) => {
             setShowStartOnly(true);
           }
           if (timerState.stoerStart && timerState.stoerRunning) {
-            setStoerStart(timerState.stoerStart);
+            const stoerStartNum = Number(timerState.stoerStart) || 0;
+            setStoerStart(stoerStartNum);
             setStoerRunning(true);
-            const stoerElapsedSec = Math.floor((now - timerState.stoerStart) / 1000);
+            const stoerElapsedSec = Math.max(0, Math.floor((now - stoerStartNum) / 1000));
             setStoerElapsed(stoerElapsedSec);
           }
 
-          // restore pause info
-          setTotalPauseSeconds(timerState.totalPauseSeconds || 0);
-          setPauseStart(timerState.pauseStart || null);
-          setPauseRunning(timerState.pauseRunning || false);
-          if (timerState.pauseRunning && timerState.pauseStart) {
-            const pElapsed = Math.floor((now - timerState.pauseStart) / 1000);
-            setPauseElapsed(pElapsed);
+          // restore pause info: prefer per-selection stored total; only restore running pause if it belongs to this selection
+          const perKey = getPauseKey(shiftData.selectedLine, shiftData.selectedShift);
+          const perTotal = await AsyncStorage.getItem(perKey);
+          if (perTotal != null) {
+            setTotalPauseSeconds(Number(perTotal));
+          } else if (timerState.pauseLine === shiftData.selectedLine && timerState.pauseShift === shiftData.selectedShift) {
+            setTotalPauseSeconds(timerState.totalPauseSeconds || 0);
+          } else {
+            setTotalPauseSeconds(0);
           }
+
+          const pauseStartNum = Number(timerState.pauseStart) || null;
+          if (timerState.pauseRunning && timerState.pauseLine === shiftData.selectedLine && timerState.pauseShift === shiftData.selectedShift) {
+            setPauseStart(pauseStartNum);
+            setPauseRunning(true);
+            const pElapsed = Math.max(0, Math.floor((now - pauseStartNum) / 1000));
+            setPauseElapsed(pElapsed);
+          } else {
+            setPauseStart(null);
+            setPauseRunning(false);
+            setPauseElapsed(0);
+          }
+        } else {
+          // no timer_state — ensure pause totals for current selection are loaded if present
+          const perKey = getPauseKey(shiftData.selectedLine, shiftData.selectedShift);
+          const perTotal = await AsyncStorage.getItem(perKey);
+          setTotalPauseSeconds(perTotal != null ? Number(perTotal) : 0);
         }
       } catch (e) {
         console.warn('Failed to load timer state', e);
@@ -252,6 +368,7 @@ const ProtocolScreen = ({ onBack }) => {
   };
 
   // Save timer state to AsyncStorage whenever it changes
+  // Also persist pause total per line+shift using getPauseKey(line,shift)
   const saveTimerState = async () => {
     try {
       const timerState = {
@@ -263,12 +380,20 @@ const ProtocolScreen = ({ onBack }) => {
         startTime: mainTimerStartTime.current,
         stoerStart,
         stoerRunning,
-        // pause info
+        // pause info (scoped in timer_state, but totals are persisted per selection)
         pauseStart,
         pauseRunning,
         totalPauseSeconds,
+        pauseLine: shiftData.selectedLine,
+        pauseShift: shiftData.selectedShift,
       };
       await AsyncStorage.setItem('timer_state', JSON.stringify(timerState));
+
+      // persist total pause seconds for the current selection (so totals are per line+shift)
+      const key = getPauseKey(shiftData.selectedLine, shiftData.selectedShift);
+      if (shiftData.selectedLine && shiftData.selectedShift) {
+        await AsyncStorage.setItem(key, String(totalPauseSeconds || 0));
+      }
     } catch (e) {
       console.warn('Failed to save timer state', e);
     }
@@ -293,6 +418,12 @@ const ProtocolScreen = ({ onBack }) => {
 
   // Button handlers that control timer and active states
   const handleStart = async () => {
+    // require FA selected before starting production
+    if (!selectedFA) {
+      setFaSearchError('Bitte zuerst einen Fertigungsauftrag auswählen');
+      return;
+    }
+
     // if there is a selected issue and a running stör timer, record it before starting
     if (selectedIssue && stoerStart) {
       const end = Date.now();
@@ -327,6 +458,12 @@ const ProtocolScreen = ({ onBack }) => {
   };
 
   const handlePause = () => {
+    // require FA selected before pausing
+    if (!selectedFA) {
+      setFaSearchError('Bitte zuerst einen Fertigungsauftrag auswählen');
+      return;
+    }
+
     // start a pause period
     if (!pauseRunning) {
       setPauseStart(Date.now());
@@ -405,24 +542,26 @@ const ProtocolScreen = ({ onBack }) => {
       console.warn('Failed to clear timer state', e);
     }
 
-    // remove assigned line and related leader/shift when production is finished so the tablet will ask again next time
+    // KEEP assigned line; only remove leader and shift when ending the shift
     try {
-      await AsyncStorage.removeItem('assigned_line');
       await AsyncStorage.removeItem('assigned_leader');
       await AsyncStorage.removeItem('assigned_shift');
     } catch (e) {
-      console.warn('Failed to remove assigned assignment keys', e);
+      console.warn('Failed to remove assigned leader/shift', e);
     }
 
-    // reset global shift data (line, leader, shift)
+    // reset global shift data (keep selectedLine, clear leader and shift)
     try {
-      updateShiftData({ selectedLine: null, selectedLeader: null, selectedShift: null });
+      updateShiftData({ selectedLine: shiftData.selectedLine || null, selectedLeader: null, selectedShift: null });
     } catch (e) {
       console.warn('Failed to update shift data', e);
     }
 
-    // navigate back to home so the UI asks for new data
-    onBack();
+    // Keep the assigned line visible but mark selection as incomplete so leader/shift must be reselected
+    setSelectionConfirmed(false);
+    // preserve localLine so it remains shown; clear leader/shift locally
+    setLocalLeader(null);
+    setLocalShift(null);
   };
 
   const openEndConfirm = () => setShowEndConfirm(true);
@@ -510,32 +649,7 @@ const ProtocolScreen = ({ onBack }) => {
     setSelectedFA(null);
   };
 
-  const handleZurückClick = () => {
-    if (currentView === 'störung') {
-      // leave the stör selection and ensure main timer is running (set status to 'Läuft')
-      setCurrentView('initial');
-      setActiveButton('start');
-      setRunning(true);
-      // reset previous flag
-      prevRunningBeforeStoer.current = false;
-      return;
-    }
 
-    // If a stör timer is currently running, interpret 'Zurück' as canceling the stör and resuming production (always restart main timer)
-    if (stoerRunning) {
-      setStoerRunning(false);
-      setStoerStart(null);
-      setStoerElapsed(0);
-      setSelectedIssue(null);
-      // always restart the main timer on cancel
-      setActiveButton('start');
-      setRunning(true);
-      prevRunningBeforeStoer.current = false;
-      return;
-    }
-
-    onBack();
-  };
 
   const statusInfo = stoerRunning || selectedIssue
     ? { color: '#EF4444', text: 'Störung' }
@@ -544,6 +658,78 @@ const ProtocolScreen = ({ onBack }) => {
     : running
     ? { color: '#22C55E', text: 'Produktion' }
     : { color: '#64748B', text: 'Bereit' };
+
+  // Selection options (small, moved from HomeScreen)
+  const lineOptions = [
+    { label: 'Linie 1', value: 'Linie 1' },
+    { label: 'Linie 2', value: 'Linie 2' },
+    { label: 'Linie 3', value: 'Linie 3' },
+    { label: 'Linie 4', value: 'Linie 4' },
+    { label: 'Linie 5', value: 'Linie 5' },
+    { label: 'Linie 6', value: 'Linie 6' },
+  ];
+
+  const leaderOptions = [
+    { label: 'Melih Iskender', value: 'Melih Iskender' },
+  ];
+
+  const shiftOptions = [
+    { label: 'Frühschicht', value: 'Frühschicht' },
+    { label: 'Spätschicht', value: 'Spätschicht' },
+  ];
+
+  const persistAssignedLine = async (val) => {
+    try {
+      if (val) {
+        await AsyncStorage.setItem('assigned_line', val);
+        // lock by default when assigning
+        await AsyncStorage.setItem('assigned_line_locked', 'true');
+        setLineLocked(true);
+      } else {
+        await AsyncStorage.removeItem('assigned_line');
+        await AsyncStorage.removeItem('assigned_line_locked');
+        setLineLocked(false);
+      }
+    } catch (e) {
+      console.warn('Failed to persist assigned line', e);
+    }
+  };
+  const persistAssignedLeader = async (val) => {
+    try {
+      if (val) await AsyncStorage.setItem('assigned_leader', val);
+      else await AsyncStorage.removeItem('assigned_leader');
+    } catch (e) {
+      console.warn('Failed to persist assigned leader', e);
+    }
+  };
+  const persistAssignedShift = async (val) => {
+    try {
+      if (val) await AsyncStorage.setItem('assigned_shift', val);
+      else await AsyncStorage.removeItem('assigned_shift');
+    } catch (e) {
+      console.warn('Failed to persist assigned shift', e);
+    }
+  };
+
+  const handleConfirmSelection = async () => {
+    if (!localLine || !localLeader || !localShift) return;
+    updateShiftData({ selectedLine: localLine, selectedLeader: localLeader, selectedShift: localShift });
+    await persistAssignedLine(localLine);
+    await persistAssignedLeader(localLeader);
+    await persistAssignedShift(localShift);
+    // lock line automatically after confirmation
+    await AsyncStorage.setItem('assigned_line_locked', 'true');
+    setLineLocked(true);
+    setSelectionConfirmed(true);
+    // reload logs for the selected context
+    loadLocalLogs();
+  };
+
+  const handleEditSelection = () => {
+    // allow editing leader/shift even when line is locked; line remains non-editable until explicitly unlocked
+    setSelectionConfirmed(false);
+    // keep local values so user can tweak
+  };
 
   return (
     <View style={protocolScreenStyles.container}>
@@ -563,6 +749,122 @@ const ProtocolScreen = ({ onBack }) => {
           {new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
         </Text>
       </View>
+
+      {/* Top compact selection area (line / leader / shift) */}
+      <View style={protocolScreenStyles.topSelectionBar}>
+        {!selectionConfirmed ? (
+          <>
+            <View style={protocolScreenStyles.selectionGroup}>
+              <TouchableOpacity
+              style={[protocolScreenStyles.selectionChip, {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}]}
+              onPress={() => { if (!lineLocked) setOpenSelectModal('line'); }}
+              activeOpacity={lineLocked ? 1 : 0.7}
+            >
+              <View>
+                <Text style={protocolScreenStyles.selectionLabelSmall}>Linie</Text>
+                <Text style={protocolScreenStyles.selectionValueSmall}>{localLine || '—'}</Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => {
+                  // if locked -> ask for unlock confirmation; if unlocked -> lock immediately
+                  if (lineLocked) setShowUnlockConfirm(true);
+                  else {
+                    setLineLocked(true);
+                    AsyncStorage.setItem('assigned_line_locked', 'true');
+                  }
+                }}
+                style={{paddingLeft: 8, paddingRight: 4}}
+              >
+                <MaterialIcons name={lineLocked ? 'lock' : 'lock-open'} size={18} color={lineLocked ? '#F59E0B' : '#94A3B8'} />
+              </TouchableOpacity>
+            </TouchableOpacity>
+
+              <TouchableOpacity style={protocolScreenStyles.selectionChip} onPress={() => setOpenSelectModal('leader')}>
+                <Text style={protocolScreenStyles.selectionLabelSmall}>Linienführer</Text>
+                <Text style={protocolScreenStyles.selectionValueSmall}>{localLeader || '—'}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={protocolScreenStyles.selectionChip} onPress={() => setOpenSelectModal('shift')}>
+                <Text style={protocolScreenStyles.selectionLabelSmall}>Schicht</Text>
+                <Text style={protocolScreenStyles.selectionValueSmall}>{localShift || '—'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={protocolScreenStyles.confirmSmallButton} onPress={handleConfirmSelection}>
+              <Text style={protocolScreenStyles.confirmSmallButtonText}>Bestätigen</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 12}}>
+            <View style={protocolScreenStyles.selectionSummarySmall}>
+              <Text style={{color: '#94A3B8', fontSize: 11}}>Linie</Text>
+              <Text style={{color: '#fff', fontWeight: '700', marginLeft: 8}}>{shiftData.selectedLine}</Text>
+              {lineLocked && (
+                <MaterialIcons name="lock" size={14} color="#F59E0B" style={{marginLeft: 8}} />
+              )}
+
+              <Text style={{color: '#94A3B8', fontSize: 11, marginLeft: 12}}>Schicht</Text>
+              <Text style={{color: '#fff', fontWeight: '700', marginLeft: 8}}>{shiftData.selectedShift}</Text>
+              <Text style={{color: '#94A3B8', fontSize: 11, marginLeft: 12}}>Führer</Text>
+              <Text style={{color: '#fff', fontWeight: '700', marginLeft: 8}}>{shiftData.selectedLeader}</Text>
+            </View>
+
+            <TouchableOpacity onPress={handleEditSelection}>
+              <Text style={protocolScreenStyles.editSelectionText}>Ändern</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* Selection Modal (line / leader / shift) */}
+      <Modal visible={openSelectModal !== null} transparent animationType="fade">
+        <View style={protocolScreenStyles.modalOverlay}>
+          <View style={protocolScreenStyles.modalSelectCard}>
+            <View style={protocolScreenStyles.modalHeaderRow}>
+              <Text style={protocolScreenStyles.modalTitle}>{openSelectModal === 'line' ? 'Linie wählen' : openSelectModal === 'leader' ? 'Linienführer wählen' : 'Schicht wählen'}</Text>
+              <TouchableOpacity onPress={() => setOpenSelectModal(null)}>
+                <Text style={protocolScreenStyles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView>
+              {(openSelectModal === 'line' ? lineOptions : openSelectModal === 'leader' ? leaderOptions : shiftOptions).map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={{paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#22313d'}}
+                  onPress={() => {
+                    if (openSelectModal === 'line') setLocalLine(opt.value);
+                    if (openSelectModal === 'leader') setLocalLeader(opt.value);
+                    if (openSelectModal === 'shift') setLocalShift(opt.value);
+                    setOpenSelectModal(null);
+                  }}
+                >
+                  <Text style={{color: '#F1F5F9', fontWeight: '600'}}>{opt.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <View style={{flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12}}>
+              <TouchableOpacity onPress={() => setOpenSelectModal(null)} style={[protocolScreenStyles.modalButton, protocolScreenStyles.modalCancel]}>
+                <Text style={protocolScreenStyles.modalCancelText}>Abbrechen</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <ConfirmModal
+        visible={showUnlockConfirm}
+        title="Linie entsperren"
+        message="Linie wirklich entsperren, damit sie geändert werden kann?"
+        onCancel={() => setShowUnlockConfirm(false)}
+        onConfirm={async () => {
+          setShowUnlockConfirm(false);
+          setLineLocked(false);
+          try { await AsyncStorage.removeItem('assigned_line_locked'); } catch (e) { /* ignore */ }
+        }}
+      />
 
       <ScrollView
         style={protocolScreenStyles.contentContainer}
@@ -770,11 +1072,16 @@ const ProtocolScreen = ({ onBack }) => {
             {showStartOnly ? (
               <View style={protocolScreenStyles.buttonsRow}>
                 <TouchableOpacity
-                  style={[protocolScreenStyles.actionButton, protocolScreenStyles.startButton]}
+                  style={[
+                    protocolScreenStyles.actionButton,
+                    protocolScreenStyles.startButton,
+                    !selectedFA && protocolScreenStyles.actionButtonDisabled,
+                  ]}
                   onPress={handleStart}
+                  disabled={!selectedFA}
                 >
-                  <MaterialIcons name="play-arrow" size={20} color="#fff" />
-                  <Text style={protocolScreenStyles.actionButtonText}>Produktion starten</Text>
+                  <MaterialIcons name="play-arrow" size={20} color={selectedFA ? '#fff' : '#94A3B8'} />
+                  <Text style={[protocolScreenStyles.actionButtonText, !selectedFA && protocolScreenStyles.actionButtonTextDisabled]}>Produktion starten</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -787,16 +1094,26 @@ const ProtocolScreen = ({ onBack }) => {
             ) : (
               <View style={protocolScreenStyles.buttonsRow}>
                 <TouchableOpacity
-                  style={[protocolScreenStyles.actionButton, protocolScreenStyles.startButton, activeButton === 'start' && protocolScreenStyles.actionButtonActive]}
+                  style={[
+                    protocolScreenStyles.actionButton,
+                    protocolScreenStyles.startButton,
+                    activeButton === 'start' && protocolScreenStyles.actionButtonActive,
+                    !selectedFA && protocolScreenStyles.actionButtonDisabled,
+                  ]}
                   onPress={handleStart}
-                  disabled={activeButton === 'start'}
+                  disabled={!selectedFA || activeButton === 'start'}
+                  accessibilityState={{ disabled: !selectedFA }}
                 >
-                  <MaterialIcons name="play-arrow" size={20} color="#fff" />
-                  <Text style={protocolScreenStyles.actionButtonText}>Produktion starten</Text>
+                  <MaterialIcons name="play-arrow" size={20} color={selectedFA ? '#fff' : '#94A3B8'} />
+                  <Text style={[protocolScreenStyles.actionButtonText, !selectedFA && protocolScreenStyles.actionButtonTextDisabled]}>Produktion starten</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[protocolScreenStyles.actionButton, protocolScreenStyles.stoerungButton, activeButton === 'störung' && protocolScreenStyles.actionButtonActive]}
+                  style={[
+                    protocolScreenStyles.actionButton,
+                    protocolScreenStyles.stoerungButton,
+                    activeButton === 'störung' && protocolScreenStyles.actionButtonActive,
+                  ]}
                   onPress={handleStörungClick}
                 >
                   <MaterialIcons name="warning" size={20} color="#fff" />
@@ -804,11 +1121,18 @@ const ProtocolScreen = ({ onBack }) => {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[protocolScreenStyles.actionButton, protocolScreenStyles.pauseButton, activeButton === 'pause' && protocolScreenStyles.actionButtonActive]}
+                  style={[
+                    protocolScreenStyles.actionButton,
+                    protocolScreenStyles.pauseButton,
+                    activeButton === 'pause' && protocolScreenStyles.actionButtonActive,
+                    !selectedFA && protocolScreenStyles.actionButtonDisabled,
+                  ]}
                   onPress={handlePause}
+                  disabled={!selectedFA}
+                  accessibilityState={{ disabled: !selectedFA }}
                 >
-                  <MaterialIcons name="pause" size={20} color="#fff" />
-                  <Text style={protocolScreenStyles.actionButtonText}>Pause setzen</Text>
+                  <MaterialIcons name="pause" size={20} color={selectedFA ? '#fff' : '#94A3B8'} />
+                  <Text style={[protocolScreenStyles.actionButtonText, !selectedFA && protocolScreenStyles.actionButtonTextDisabled]}>Pause setzen</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -824,10 +1148,10 @@ const ProtocolScreen = ({ onBack }) => {
         )}
 
         {/* Störung Selection Modal */}
-        {currentView === 'störung' && lineButtonConfig[shiftData.selectedLine]?.störung && (
+        {currentView === 'störung' && lineButtonConfig[effectiveLine]?.störung && (
           <View style={protocolScreenStyles.stoerungModal}>
             <Text style={protocolScreenStyles.sectionTitle}>STÖRUNG AUSWÄHLEN</Text>
-            {renderButtons(lineButtonConfig[shiftData.selectedLine].störung)}
+            {renderButtons(lineButtonConfig[effectiveLine].störung)}
           </View>
         )}
 
@@ -923,12 +1247,6 @@ const ProtocolScreen = ({ onBack }) => {
         onCancel={cancelEndConfirm}
         onConfirm={confirmEnd}
       />
-      
-      {/* Back Button */}
-      <TouchableOpacity style={protocolScreenStyles.backButton} onPress={handleZurückClick}>
-        <MaterialIcons name="arrow-back" size={20} color="#F1F5F9" />
-        <Text style={protocolScreenStyles.backButtonText}>Zurück</Text>
-      </TouchableOpacity>
     </View>
   );
 };

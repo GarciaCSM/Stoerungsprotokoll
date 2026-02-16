@@ -5,74 +5,33 @@ import { homeScreenStyles } from '../styles/HomeScreenStyles';
 import { useShift } from '../context/ShiftContext';
 import ProtocolScreen from './ProtocolScreen';
 
-const CustomDropdown = ({ label, value, options, onSelect, placeholder, isOpen, onToggle }) => {
-  const handleSelect = (option) => {
-    onSelect(option.value);
-    onToggle();
-  };
 
-  return (
-    <View style={homeScreenStyles.dropdownWrapper}>
-      <TouchableOpacity 
-        style={homeScreenStyles.dropdownButton}
-        onPress={onToggle}
-      >
-        <Text style={homeScreenStyles.dropdownButtonText}>
-          {value || placeholder}
-        </Text>
-        <Text style={homeScreenStyles.dropdownArrow}>{isOpen ? '▲' : '▼'}</Text>
-      </TouchableOpacity>
-      
-      {isOpen && (
-        <ScrollView style={homeScreenStyles.dropdownList} nestedScrollEnabled={true}>
-          {options.map((option, index) => (
-            <TouchableOpacity
-              key={index}
-              style={homeScreenStyles.dropdownItem}
-              onPress={() => handleSelect(option)}
-            >
-              <Text style={homeScreenStyles.dropdownItemText}>{option.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
-    </View>
-  );
-};
 
 const HomeScreen = () => {
   const { shiftData, updateShiftData } = useShift();
-  const [openDropdown, setOpenDropdown] = useState(null);
   const [showProtocol, setShowProtocol] = useState(false);
   const [showLineModal, setShowLineModal] = useState(false);
   const [hasAssignedLine, setHasAssignedLine] = useState(false);
 
-  const toggleDropdown = (dropdownName) => {
-    setOpenDropdown(openDropdown === dropdownName ? null : dropdownName);
-  };
-
   const handleContinue = () => {
-    if (shiftData.selectedLine && shiftData.selectedLeader && shiftData.selectedShift) {
-      setShowProtocol(true);
-    }
+    // proceed to protocol screen; selection is handled there
+    setShowProtocol(true);
   };
 
   const handleBack = () => {
     setShowProtocol(false);
   };
 
-  const handleLineSelect = async (value) => {
-    updateShiftData({ selectedLine: value });
-    await persistAssignedLine(value);
-  };
-
   const persistAssignedLine = async (value) => {
     try {
       if (value) {
         await AsyncStorage.setItem('assigned_line', value);
+        // lock by default when assigning
+        await AsyncStorage.setItem('assigned_line_locked', 'true');
         setHasAssignedLine(true);
       } else {
         await AsyncStorage.removeItem('assigned_line');
+        await AsyncStorage.removeItem('assigned_line_locked');
         // also remove persisted leader and shift when assignment is cleared
         await AsyncStorage.removeItem('assigned_leader');
         await AsyncStorage.removeItem('assigned_shift');
@@ -83,7 +42,7 @@ const HomeScreen = () => {
     }
   };
 
-  // persist leader/shift as well
+  // persist leader/shift as well (keine Inline-UI mehr auf HomeScreen)
   const persistAssignedLeader = async (value) => {
     try {
       if (value) {
@@ -120,16 +79,6 @@ const HomeScreen = () => {
     setShowLineModal(false);
   };
 
-  const handleLeaderSelect = async (value) => {
-    updateShiftData({ selectedLeader: value });
-    await persistAssignedLeader(value);
-  };
-
-  const handleShiftSelect = async (value) => {
-    updateShiftData({ selectedShift: value });
-    await persistAssignedShift(value);
-  };
-
   const lineOptions = [
     { label: 'Linie 1', value: 'Linie 1' },
     { label: 'Linie 2', value: 'Linie 2' },
@@ -137,15 +86,6 @@ const HomeScreen = () => {
     { label: 'Linie 4', value: 'Linie 4' },
     { label: 'Linie 5', value: 'Linie 5' },
     { label: 'Linie 6', value: 'Linie 6' },
-  ];
-
-  const leaderOptions = [
-    { label: 'Melih Iskender', value: 'Melih Iskender' },
-  ];
-
-  const shiftOptions = [
-    { label: 'Frühschicht', value: 'Frühschicht' },
-    { label: 'Spätschicht', value: 'Spätschicht' },
   ];
 
   useEffect(() => {
@@ -180,48 +120,18 @@ const HomeScreen = () => {
         <Text style={homeScreenStyles.title}>Störungsprotokoll</Text>
         <Text style={homeScreenStyles.subtitle}>Bitte geben Sie die Schichtinformationen ein</Text>
 
-        <View style={[homeScreenStyles.formGroup, { zIndex: 3 }]}>
-          <Text style={homeScreenStyles.label}>Produktionslinie</Text>
+        <View style={[homeScreenStyles.formGroup, { zIndex: 1 }]}> 
+          <Text style={homeScreenStyles.label}>Schicht‑Infos</Text>
 
-          {/* If an assigned_line exists we show a non-editable display; change via long-press (hidden) */}
           {hasAssignedLine && shiftData.selectedLine ? (
-            <TouchableOpacity onLongPress={() => setShowLineModal(true)}>
+            <View>
               <Text style={homeScreenStyles.assignedLineText}>{shiftData.selectedLine}</Text>
-            </TouchableOpacity>
+              <Text style={{color: '#94A3B8', marginTop: 6}}>{shiftData.selectedShift} · {shiftData.selectedLeader}</Text>
+            </View>
           ) : (
-            <CustomDropdown
-              value={shiftData.selectedLine}
-              options={lineOptions}
-              onSelect={handleLineSelect}
-              placeholder="Bitte wählen..."
-              isOpen={openDropdown === 'line'}
-              onToggle={() => toggleDropdown('line')}
-            />
+            <Text style={{color: '#94A3B8'}}>Linie, Schicht und Linienführer kannst du jetzt im Protokoll oben auswählen.</Text>
           )}
-        </View>
 
-        <View style={[homeScreenStyles.formGroup, { zIndex: 2 }]}>
-          <Text style={homeScreenStyles.label}>Linienführer</Text>
-          <CustomDropdown
-            value={shiftData.selectedLeader}
-            options={leaderOptions}
-            onSelect={handleLeaderSelect}
-            placeholder="Bitte wählen..."
-            isOpen={openDropdown === 'leader'}
-            onToggle={() => toggleDropdown('leader')}
-          />
-        </View>
-
-        <View style={[homeScreenStyles.formGroup, { zIndex: 1 }]}>
-          <Text style={homeScreenStyles.label}>Schicht</Text>
-          <CustomDropdown
-            value={shiftData.selectedShift}
-            options={shiftOptions}
-            onSelect={handleShiftSelect}
-            placeholder="Bitte wählen..."
-            isOpen={openDropdown === 'shift'}
-            onToggle={() => toggleDropdown('shift')}
-          />
         </View>
 
         <TouchableOpacity style={homeScreenStyles.submitButton} onPress={handleContinue}>
