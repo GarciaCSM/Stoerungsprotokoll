@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { THEME } from '../styles/globalStyles';
 
 const SampleComponent = () => {
   return (
@@ -12,12 +13,12 @@ const SampleComponent = () => {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
+    backgroundColor: THEME.colors.light.borderLight,
+    borderRadius: THEME.radius.md,
   },
   text: {
     fontSize: 16,
-    color: '#333',
+    color: THEME.colors.light.foregroundDim,
   },
 });
 

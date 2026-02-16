@@ -1,6 +1,6 @@
 // API Configuration
-// Using Render backend URL (API mounted under /api)
-export const API_BASE_URL = 'https://st-rungsprotkoll-1.onrender.com/api';
+// Using local backend server on network IP (accessible from phone/emulator)
+export const API_BASE_URL = 'http://192.168.10.127:3001/api';
 
 // API Endpoints
 export const API_ENDPOINTS = {

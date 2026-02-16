@@ -1,39 +1,20 @@
 import { StyleSheet, Platform } from 'react-native';
 
-// Dark Dashboard Theme
-const COLORS = {
-  // Dark Background
-  background: '#1E293B',
-  backgroundLight: '#2D3B4E',
-  card: '#334155',
-  cardHover: '#3B4A5F',
-  
-  // Borders
-  border: '#475569',
-  borderLight: '#64748B',
-  
-  // Text
-  foreground: '#F1F5F9',
-  foregroundMuted: '#94A3B8',
-  foregroundDim: '#64748B',
-  
-  // Status Colors
-  success: '#22C55E',
-  successDark: '#16A34A',
-  warning: '#F59E0B',
-  danger: '#EF4444',
-  info: '#3B82F6',
-  
-  // Accent
-  primary: '#3B82F6',
-  primaryHover: '#2563EB',
-  
-  // Special
-  netto: '#10B981',
-  brutto: '#64748B',
-};
+import { THEME } from './globalStyles';
+
+// use centralized theme palette (dark mode for Protocol screen)
+const COLORS = THEME.colors.dark;
 
 const protocolScreenStyles = StyleSheet.create({
+  // Base Card Style — reusable across all card components
+  baseCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: THEME.radius.lg,
+    padding: THEME.spacing.xl,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
   // Main Container
   container: {
     flex: 1,
@@ -41,7 +22,7 @@ const protocolScreenStyles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
-    padding: 20,
+    padding: THEME.spacing.xl,
   },
   // ensure there's inner scroll padding so last elements are reachable under floating controls
   scrollContent: {
@@ -67,9 +48,9 @@ const protocolScreenStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 16,
-    paddingHorizontal: 20,          // align with card padding
+    gap: THEME.spacing.md,
+    marginBottom: THEME.spacing.lg,
+    paddingHorizontal: THEME.spacing.xl,          // align with card padding
   },
   selectionGroup: {
     flexDirection: 'row',
@@ -78,13 +59,13 @@ const protocolScreenStyles = StyleSheet.create({
     flex: 1,
   },
   selectionChip: {
-    backgroundColor: '#0E2940',
+    backgroundColor: COLORS.background,
     borderWidth: 1,
-    borderColor: '#123246',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    minWidth: 110,
+    borderColor: COLORS.border,
+    paddingVertical: THEME.spacing.sm,
+    paddingHorizontal: THEME.spacing.md,
+    borderRadius: THEME.radius.md,
+    minWidth: THEME.dimensions.minWidthSmall,
     alignItems: 'flex-start',
   },
   selectionLabelSmall: {
@@ -101,21 +82,21 @@ const protocolScreenStyles = StyleSheet.create({
   },
   confirmSmallButton: {
     backgroundColor: COLORS.primary,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginRight: 8,                 // spacing from right edge
+    paddingVertical: THEME.spacing.sm,
+    paddingHorizontal: THEME.spacing.md,
+    borderRadius: THEME.radius.md,
+    marginRight: THEME.spacing.sm,                 // spacing from right edge
   },
   confirmSmallButtonText: {
-    color: '#fff',
+    color: COLORS.foreground,
     fontWeight: '700',
     fontSize: 13,
   },
   selectionSummarySmall: {
     backgroundColor: COLORS.backgroundLight,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
+    paddingVertical: THEME.spacing.sm,
+    paddingHorizontal: THEME.spacing.md,
+    borderRadius: THEME.radius.md,
     borderWidth: 1,
     borderColor: COLORS.border,
     alignItems: 'center',
@@ -152,7 +133,7 @@ const protocolScreenStyles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     color: COLORS.foreground,
-    letterSpacing: 2,
+    letterSpacing: THEME.letterSpacing.wider,
   },
 
   // Runtime status indicator (small LED + label)
@@ -167,7 +148,7 @@ const protocolScreenStyles = StyleSheet.create({
     borderRadius: 6,
     marginRight: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderColor: COLORS.overlayVeryLow,
   },
   statusText: {
     fontSize: 12,
@@ -186,18 +167,11 @@ const protocolScreenStyles = StyleSheet.create({
     gap: 16,
   },
 
-  // FA-Section Card - Full Width
-  faSectionCardFullWidth: {
-    backgroundColor: COLORS.card,
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
+  // FA-Section Card (single source-of-truth)
   faSectionCard: {
     backgroundColor: COLORS.card,
-    borderRadius: 12,
-    padding: 20,
+    borderRadius: THEME.radius.lg,
+    padding: THEME.spacing.xl,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
@@ -208,7 +182,7 @@ const protocolScreenStyles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.foregroundMuted,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: THEME.letterSpacing.wide,
     marginBottom: 16,
   },
 
@@ -241,7 +215,7 @@ const protocolScreenStyles = StyleSheet.create({
     gap: 6,
   },
   faSearchButtonText: {
-    color: '#FFFFFF',
+    color: COLORS.foreground,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -259,7 +233,7 @@ const protocolScreenStyles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: 8,
     marginTop: 8,
-    maxHeight: 220,
+    maxHeight: THEME.dimensions.maxHeightFaResults,
   },
   faResultsTitle: {
     fontSize: 12,
@@ -271,7 +245,7 @@ const protocolScreenStyles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   faResultsList: {
-    maxHeight: 180,
+    maxHeight: THEME.dimensions.maxHeightFaList,
   },
   faResultItem: {
     paddingHorizontal: 14,
@@ -377,7 +351,7 @@ const protocolScreenStyles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.foregroundMuted,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: THEME.letterSpacing.wide,
     marginBottom: 12,
   },
   sollIstValue: {
@@ -398,19 +372,12 @@ const protocolScreenStyles = StyleSheet.create({
   },
 
   // Zeitübersicht Card
-  zeitCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
   zeitTitle: {
     fontSize: 11,
     fontWeight: '700',
     color: COLORS.foregroundMuted,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: THEME.letterSpacing.wide,
     marginBottom: 16,
   },
   zeitRow: {
@@ -440,7 +407,7 @@ const protocolScreenStyles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 6,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: THEME.letterSpacing.normal,
   },
   zeitPairValue: {
     fontSize: 16,
@@ -452,12 +419,12 @@ const protocolScreenStyles = StyleSheet.create({
 
   // inner box used for each Zeit‑element (dunklerer Blauton)
   zeitInnerBox: {
-    backgroundColor: '#0E2940',
+    backgroundColor: COLORS.panel,
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#123246',
+    borderColor: COLORS.panelBorder,
     width: '100%',
   },
 
@@ -477,7 +444,7 @@ const protocolScreenStyles = StyleSheet.create({
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    letterSpacing: 0.5,
+    letterSpacing: THEME.letterSpacing.tight,
   },
 
   // Action Buttons
@@ -494,19 +461,19 @@ const protocolScreenStyles = StyleSheet.create({
   },
   actionButtonText: {
     fontSize: 13,
-    color: '#FFFFFF',
+    color: COLORS.foreground,
     textAlign: 'center',
     fontWeight: '600',
   },
   // Disabled state for primary action (greyed out)
   actionButtonDisabled: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: COLORS.overlayLow,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.03)',
+    borderColor: COLORS.overlayLower,
     opacity: 0.5,
   },
   actionButtonTextDisabled: {
-    color: 'rgba(241,245,249,0.48)',
+    color: COLORS.textDisabled,
   },
   startButton: {
     backgroundColor: COLORS.success,
@@ -530,7 +497,7 @@ const protocolScreenStyles = StyleSheet.create({
   },
   disturbanceCard: {
     width: '31%',
-    minWidth: 160,
+    minWidth: THEME.dimensions.minWidthLarge,
     maxWidth: '32%',
     backgroundColor: COLORS.card,
     borderWidth: 1,
@@ -624,21 +591,7 @@ const protocolScreenStyles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  
-  tabRow: {
-    flexDirection: 'row',
-    marginBottom: 12,
-    gap: 8,
-  },
-  tabButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-    backgroundColor: COLORS.backgroundLight,
-  },
-  tabActive: {
-    backgroundColor: COLORS.primary,
-  },
+
   tabText: {
     fontSize: 13,
     color: COLORS.foregroundMuted,
@@ -647,8 +600,8 @@ const protocolScreenStyles = StyleSheet.create({
 
   tableContainer: {
     backgroundColor: COLORS.card,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: THEME.radius.lg,
+    padding: THEME.spacing.lg,
     maxWidth: 760,
     width: '92%',
     alignSelf: 'center',
@@ -673,7 +626,7 @@ const protocolScreenStyles = StyleSheet.create({
     textAlign: 'left',
   },
   tableScroll: {
-    maxHeight: 256,
+    maxHeight: THEME.dimensions.maxHeightLogsTable,
   },
   tableRow: {
     flexDirection: 'row',
@@ -715,7 +668,7 @@ const protocolScreenStyles = StyleSheet.create({
   },
   summaryCard: {
     flex: 1,
-    minWidth: 120,
+    minWidth: THEME.dimensions.minWidthMedium,
     backgroundColor: COLORS.backgroundLight,
     borderRadius: 8,
     padding: 16,
@@ -744,30 +697,11 @@ const protocolScreenStyles = StyleSheet.create({
   // Confirm Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: COLORS.overlayModal,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  modalCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 12,
-    padding: 24,
-    width: '80%',
-    maxWidth: 400,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  modalText: {
-    fontSize: 16,
-    color: COLORS.foreground,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
+
   modalButton: {
     flex: 1,
     paddingVertical: 12,
@@ -787,11 +721,40 @@ const protocolScreenStyles = StyleSheet.create({
     fontSize: 14,
   },
   modalConfirmText: {
-    color: '#FFFFFF',
+    color: COLORS.foreground,
     fontWeight: '700',
     fontSize: 14,
   },
 
+  /* Compact modal styles used by ConfirmModal */
+  modalContainerCompact: {
+    width: '88%',
+    maxWidth: 360,
+    backgroundColor: COLORS.card,
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalMessageCompact: {
+    fontSize: 14,
+    color: COLORS.foregroundMuted,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalButtonsRowCompact: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  modalButtonCompact: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    minWidth: THEME.dimensions.minWidthSmall,
+    alignItems: 'center',
+  },
 
   // Right Column (for dashboard grid layout)
   rightColumn: {
@@ -812,11 +775,7 @@ const protocolScreenStyles = StyleSheet.create({
     marginTop: 16,
     marginHorizontal: 20,
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    ...THEME.shadow.small,
   },
   backButtonText: {
     fontSize: 14,
@@ -838,21 +797,42 @@ const protocolScreenStyles = StyleSheet.create({
   // Störung Modal (selection screen)
   stoerungModal: {
     backgroundColor: COLORS.card,
-    borderRadius: 12,
-    padding: 20,
-    margin: 16,
+    borderRadius: THEME.radius.lg,
+    padding: THEME.spacing.xl,
+    margin: THEME.spacing.lg,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
 
   // Logs Section
   logsSection: {
-    backgroundColor: COLORS.card,
-    borderRadius: 12,
-    padding: 20,
-    margin: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    /* removed outer "card" box per UI request — keep spacing but no background/border */
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    padding: 0,
+    margin: THEME.spacing.lg,
+    borderWidth: 0,
+  },
+
+  // Tabs: group the two tab buttons inside a single pill-like container
+  tabRow: {
+    flexDirection: 'row',
+    marginBottom: THEME.spacing.md,
+    gap: THEME.spacing.sm,
+    backgroundColor: COLORS.backgroundLight,
+    padding: THEME.spacing.xs,
+    borderRadius: THEME.radius.round,
+    alignSelf: 'flex-start',
+  },
+  tabButton: {
+    paddingHorizontal: THEME.spacing.lg,
+    paddingVertical: THEME.spacing.sm,
+    borderRadius: THEME.radius.md,
+    backgroundColor: 'transparent',
+  },
+  tabActive: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
   },
 
   // Tab Text Active

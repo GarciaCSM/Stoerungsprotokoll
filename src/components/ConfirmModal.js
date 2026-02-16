@@ -3,6 +3,7 @@ import { Modal, View, Text, TouchableOpacity } from 'react-native';
 import protocolScreenStyles from '../styles/ProtocolScreenStyles';
 
 const ConfirmModal = ({ visible, title = 'Bestätigen', message = 'Bist du sicher?', onCancel, onConfirm }) => {
+  // compact-only modal (used app-wide)
   return (
     <Modal
       visible={visible}
@@ -11,16 +12,16 @@ const ConfirmModal = ({ visible, title = 'Bestätigen', message = 'Bist du siche
       onRequestClose={onCancel}
     >
       <View style={protocolScreenStyles.modalOverlay}>
-        <View style={protocolScreenStyles.modalContainer}>
+        <View style={protocolScreenStyles.modalContainerCompact}>
           <Text style={protocolScreenStyles.modalTitle}>{title}</Text>
-          <Text style={protocolScreenStyles.modalMessage}>{message}</Text>
+          <Text style={protocolScreenStyles.modalMessageCompact}>{message}</Text>
 
-          <View style={protocolScreenStyles.modalButtonsRow}>
-            <TouchableOpacity style={[protocolScreenStyles.modalButton, protocolScreenStyles.modalCancel]} onPress={onCancel}>
+          <View style={protocolScreenStyles.modalButtonsRowCompact}>
+            <TouchableOpacity style={[protocolScreenStyles.modalButtonCompact, protocolScreenStyles.modalCancel]} onPress={onCancel}>
               <Text style={protocolScreenStyles.modalCancelText}>Abbrechen</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[protocolScreenStyles.modalButton, protocolScreenStyles.modalConfirm]} onPress={onConfirm}>
+            <TouchableOpacity style={[protocolScreenStyles.modalButtonCompact, protocolScreenStyles.modalConfirm]} onPress={onConfirm}>
               <Text style={protocolScreenStyles.modalConfirmText}>Bestätigen</Text>
             </TouchableOpacity>
           </View>

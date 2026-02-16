@@ -1,12 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ConfirmModal from '../components/ConfirmModal';
 import { useShift } from '../context/ShiftContext';
 import protocolScreenStyles from '../styles/ProtocolScreenStyles';
+import { THEME } from '../styles/globalStyles';
 import { lineButtonConfig } from '../config/lineButtonConfig';
 import { MaterialIcons } from '@expo/vector-icons';
 import FAService from '../services/faService';
+import { pickAndParseSheet, buildSollMap } from '../services/excelService';
 
 const ProtocolScreen = ({ onBack }) => {
   const { shiftData, updateShiftData } = useShift();
@@ -21,7 +23,13 @@ const ProtocolScreen = ({ onBack }) => {
 
   // Line lock state: prevents accidental line changes. Persisted to AsyncStorage as 'assigned_line_locked'
   const [lineLocked, setLineLocked] = useState(false);
-  const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
+
+  // Unified confirm dialog state (used for Schicht beenden, Schloss entsperren, Produktion starten)
+  const [confirmDialog, setConfirmDialog] = useState({ visible: false, title: '', message: '', onConfirm: null });
+  const showConfirm = ({ title = 'Bestätigen', message = 'Bist du sicher?', onConfirm = null }) => {
+    setConfirmDialog({ visible: true, title, message, onConfirm });
+  };
+  const hideConfirm = () => setConfirmDialog(prev => ({ ...prev, visible: false, onConfirm: null }));
 
   // Timer state
   const [elapsed, setElapsed] = useState(0); // seconds
@@ -37,6 +45,11 @@ const ProtocolScreen = ({ onBack }) => {
   const [faSearchResults, setFaSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedFA, setSelectedFA] = useState(null); // {FANr, ArtikelNr, Artikelbezeichnung}
+
+  // SOLL import / mapping (import from Excel tab "SOLL-STUNDEN")
+  const [sollPerHour, setSollPerHour] = useState(0);
+  const [sollMap, setSollMap] = useState({});
+  const [isImportingSoll, setIsImportingSoll] = useState(false);
 
   // Störung timer state
   const [stoerStart, setStoerStart] = useState(null); // timestamp ms
@@ -113,6 +126,33 @@ const ProtocolScreen = ({ onBack }) => {
       }
     };
   }, [stoerRunning, stoerStart]);
+
+  // Load persisted SOLL mapping (if any) and apply to selected FA
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem('soll_hours_map');
+        const map = raw ? JSON.parse(raw) : {};
+        setSollMap(map || {});
+        if (selectedFA && selectedFA.ArtikelNr) {
+          const v = map[selectedFA.ArtikelNr];
+          if (v != null) setSollPerHour(v);
+        }
+      } catch (e) {
+        console.warn('Failed to load persisted SOLL mapping', e);
+      }
+    })();
+  }, []);
+
+  // keep SOLL value updated when selectedFA or map changes
+  useEffect(() => {
+    if (selectedFA && selectedFA.ArtikelNr) {
+      const v = sollMap[selectedFA.ArtikelNr];
+      setSollPerHour(v != null ? v : 0);
+    } else {
+      setSollPerHour(0);
+    }
+  }, [selectedFA, sollMap]);
 
   // Pause timer effect: track an active pause and update totalPauseSeconds while pausing
   useEffect(() => {
@@ -198,6 +238,30 @@ const ProtocolScreen = ({ onBack }) => {
       setLocalLogs(todays.reverse()); // latest first
     } catch (e) {
       console.warn('Failed to load local logs', e);
+    }
+  };
+
+  // Import SOLL‑Stunden from an Excel file (sheet "SOLL-STUNDEN")
+  const handleImportSoll = async () => {
+    setIsImportingSoll(true);
+    try {
+      const parsed = await pickAndParseSheet('SOLL-STUNDEN');
+      if (parsed.cancelled) return;
+      const rows = parsed.rows || [];
+      const map = buildSollMap(rows);
+      await AsyncStorage.setItem('soll_hours_map', JSON.stringify(map));
+      setSollMap(map || {});
+      const count = Object.keys(map).length;
+      Alert.alert('Import erfolgreich', `Es wurden ${count} SOLL‑Einträge importiert.`);
+      // apply immediately if a FA is selected
+      if (selectedFA && selectedFA.ArtikelNr && map[selectedFA.ArtikelNr] != null) {
+        setSollPerHour(map[selectedFA.ArtikelNr]);
+      }
+    } catch (e) {
+      console.warn('SOLL Import failed', e);
+      Alert.alert('Import fehlgeschlagen', e.message || String(e));
+    } finally {
+      setIsImportingSoll(false);
     }
   };
 
@@ -523,7 +587,7 @@ const ProtocolScreen = ({ onBack }) => {
     console.log('Issue selected:', issueLabel);
   };
 
-  const [showEndConfirm, setShowEndConfirm] = useState(false);
+
 
   const handleEnde = async () => {
     setActiveButton(null);
@@ -564,10 +628,10 @@ const ProtocolScreen = ({ onBack }) => {
     setLocalShift(null);
   };
 
-  const openEndConfirm = () => setShowEndConfirm(true);
-  const cancelEndConfirm = () => setShowEndConfirm(false);
+  const openEndConfirm = () => showConfirm({ title: 'Schicht beenden', message: 'Bist du sicher, dass du die Schicht beenden möchtest?', onConfirm: confirmEnd });
+  const cancelEndConfirm = () => hideConfirm();
   const confirmEnd = () => {
-    setShowEndConfirm(false);
+    hideConfirm();
     handleEnde();
   };
 
@@ -590,7 +654,7 @@ const ProtocolScreen = ({ onBack }) => {
                 onPress={() => handleIssueSelect(buttonLabel)}
               >
                 <View style={{alignItems: 'center'}}>
-                  <MaterialIcons name="warning" size={20} color="#94A3B8" style={protocolScreenStyles.disturbanceIcon} />
+                  <MaterialIcons name="warning" size={20} color={THEME.colors.dark.foregroundMuted} style={protocolScreenStyles.disturbanceIcon} />
                   <Text style={protocolScreenStyles.actionButtonText} numberOfLines={2} ellipsizeMode="tail">{buttonLabel}</Text>
                 </View>
               </TouchableOpacity>
@@ -652,12 +716,12 @@ const ProtocolScreen = ({ onBack }) => {
 
 
   const statusInfo = stoerRunning || selectedIssue
-    ? { color: '#EF4444', text: 'Störung' }
+    ? { color: THEME.colors.dark.danger, text: 'Störung' }
     : pauseRunning
-    ? { color: '#F59E0B', text: 'Pause' }
+    ? { color: THEME.colors.dark.warning, text: 'Pause' }
     : running
-    ? { color: '#22C55E', text: 'Produktion' }
-    : { color: '#64748B', text: 'Bereit' };
+    ? { color: THEME.colors.dark.success, text: 'Produktion' }
+    : { color: THEME.colors.dark.brutto, text: 'Bereit' };
 
   // Selection options (small, moved from HomeScreen)
   const lineOptions = [
@@ -736,7 +800,7 @@ const ProtocolScreen = ({ onBack }) => {
       {/* Header Bar */}
       <View style={protocolScreenStyles.headerBar}>
         <View style={protocolScreenStyles.headerLeft}>
-          <MaterialIcons name="assessment" size={28} color="#3B82F6" />
+          <MaterialIcons name="assessment" size={28} color={THEME.colors.dark.info} />
           <Text style={protocolScreenStyles.headerTitle}>Produktions-Monitor</Text>
         </View>
 
@@ -768,7 +832,7 @@ const ProtocolScreen = ({ onBack }) => {
               <TouchableOpacity
                 onPress={() => {
                   // if locked -> ask for unlock confirmation; if unlocked -> lock immediately
-                  if (lineLocked) setShowUnlockConfirm(true);
+                  if (lineLocked) showConfirm({ title: 'Linie entsperren', message: 'Linie wirklich entsperren, damit sie geändert werden kann?', onConfirm: async () => { setLineLocked(false); try { await AsyncStorage.removeItem('assigned_line_locked'); } catch (e) { /* ignore */ } } });
                   else {
                     setLineLocked(true);
                     AsyncStorage.setItem('assigned_line_locked', 'true');
@@ -776,7 +840,7 @@ const ProtocolScreen = ({ onBack }) => {
                 }}
                 style={{paddingLeft: 8, paddingRight: 4}}
               >
-                <MaterialIcons name={lineLocked ? 'lock' : 'lock-open'} size={18} color={lineLocked ? '#F59E0B' : '#94A3B8'} />
+                <MaterialIcons name={lineLocked ? 'lock' : 'lock-open'} size={18} color={lineLocked ? THEME.colors.dark.warning : THEME.colors.dark.foregroundMuted} />
               </TouchableOpacity>
             </TouchableOpacity>
 
@@ -798,16 +862,16 @@ const ProtocolScreen = ({ onBack }) => {
         ) : (
           <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 12}}>
             <View style={protocolScreenStyles.selectionSummarySmall}>
-              <Text style={{color: '#94A3B8', fontSize: 11}}>Linie</Text>
-              <Text style={{color: '#fff', fontWeight: '700', marginLeft: 8}}>{shiftData.selectedLine}</Text>
+              <Text style={{color: THEME.colors.dark.foregroundMuted, fontSize: 11}}>Linie</Text>
+              <Text style={{color: THEME.colors.dark.foreground, fontWeight: '700', marginLeft: 8}}>{shiftData.selectedLine}</Text>
               {lineLocked && (
-                <MaterialIcons name="lock" size={14} color="#F59E0B" style={{marginLeft: 8}} />
+                <MaterialIcons name="lock" size={14} color={THEME.colors.dark.warning} style={{marginLeft: 8}} />
               )}
 
-              <Text style={{color: '#94A3B8', fontSize: 11, marginLeft: 12}}>Schicht</Text>
-              <Text style={{color: '#fff', fontWeight: '700', marginLeft: 8}}>{shiftData.selectedShift}</Text>
-              <Text style={{color: '#94A3B8', fontSize: 11, marginLeft: 12}}>Führer</Text>
-              <Text style={{color: '#fff', fontWeight: '700', marginLeft: 8}}>{shiftData.selectedLeader}</Text>
+              <Text style={{color: THEME.colors.dark.foregroundMuted, fontSize: 11, marginLeft: 12}}>Schicht</Text>
+              <Text style={{color: THEME.colors.dark.foreground, fontWeight: '700', marginLeft: 8}}>{shiftData.selectedShift}</Text>
+              <Text style={{color: THEME.colors.dark.foregroundMuted, fontSize: 11, marginLeft: 12}}>Führer</Text>
+              <Text style={{color: THEME.colors.dark.foreground, fontWeight: '700', marginLeft: 8}}>{shiftData.selectedLeader}</Text>
             </View>
 
             <TouchableOpacity onPress={handleEditSelection}>
@@ -832,7 +896,7 @@ const ProtocolScreen = ({ onBack }) => {
               {(openSelectModal === 'line' ? lineOptions : openSelectModal === 'leader' ? leaderOptions : shiftOptions).map((opt) => (
                 <TouchableOpacity
                   key={opt.value}
-                  style={{paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#22313d'}}
+                  style={{paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: THEME.colors.dark.border}}
                   onPress={() => {
                     if (openSelectModal === 'line') setLocalLine(opt.value);
                     if (openSelectModal === 'leader') setLocalLeader(opt.value);
@@ -840,7 +904,7 @@ const ProtocolScreen = ({ onBack }) => {
                     setOpenSelectModal(null);
                   }}
                 >
-                  <Text style={{color: '#F1F5F9', fontWeight: '600'}}>{opt.label}</Text>
+                  <Text style={{color: THEME.colors.dark.foreground, fontWeight: '600'}}>{opt.label}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -854,17 +918,10 @@ const ProtocolScreen = ({ onBack }) => {
         </View>
       </Modal>
 
-      <ConfirmModal
-        visible={showUnlockConfirm}
-        title="Linie entsperren"
-        message="Linie wirklich entsperren, damit sie geändert werden kann?"
-        onCancel={() => setShowUnlockConfirm(false)}
-        onConfirm={async () => {
-          setShowUnlockConfirm(false);
-          setLineLocked(false);
-          try { await AsyncStorage.removeItem('assigned_line_locked'); } catch (e) { /* ignore */ }
-        }}
-      />
+
+
+      {/* Start confirmation modal (compact, reuses same component) */}
+
 
       <ScrollView
         style={protocolScreenStyles.contentContainer}
@@ -874,7 +931,7 @@ const ProtocolScreen = ({ onBack }) => {
         <View style={protocolScreenStyles.dashboardGrid}>
           
           {/* FA Section - Full Width */}
-          <View style={protocolScreenStyles.faSectionCardFullWidth}>
+          <View style={protocolScreenStyles.faSectionCard}>
             <Text style={protocolScreenStyles.sectionTitle}>FERTIGUNGSAUFTRAG</Text>
             
             {!selectedFA ? (
@@ -883,7 +940,7 @@ const ProtocolScreen = ({ onBack }) => {
                   <TextInput
                     style={protocolScreenStyles.faSearchInput}
                     placeholder="FA-Nummer eingeben"
-                    placeholderTextColor="#64748B"
+                    placeholderTextColor={THEME.colors.dark.foregroundDim}
                     value={faSearchText}
                     onChangeText={setFaSearchText}
                     autoCapitalize="characters"
@@ -894,7 +951,7 @@ const ProtocolScreen = ({ onBack }) => {
                     onPress={handleFASearch}
                     disabled={isSearching}
                   >
-                    <MaterialIcons name="search" size={20} color="#fff" />
+                    <MaterialIcons name="search" size={20} color={THEME.colors.dark.foreground} />
                   </TouchableOpacity>
                 </View>
                 
@@ -940,7 +997,7 @@ const ProtocolScreen = ({ onBack }) => {
                   style={protocolScreenStyles.faRemoveButton}
                   onPress={handleRemoveFA}
                 >
-                  <MaterialIcons name="close" size={20} color="#EF4444" />
+                  <MaterialIcons name="close" size={20} color={THEME.colors.dark.danger} />
                 </TouchableOpacity>
               </View>
             )}
@@ -950,8 +1007,13 @@ const ProtocolScreen = ({ onBack }) => {
           <View style={protocolScreenStyles.sollIstZeitRow}>
             <View style={protocolScreenStyles.sollIstColumn}>
               <View style={protocolScreenStyles.sollIstCard}>
-                <Text style={protocolScreenStyles.sollIstLabel}>SOLL</Text>
-                <Text style={protocolScreenStyles.sollIstValue}>0</Text>
+                <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%'}}>
+                  <Text style={protocolScreenStyles.sollIstLabel}>SOLL</Text>
+                  <TouchableOpacity onPress={handleImportSoll} disabled={isImportingSoll} style={{padding: 6}}>
+                    <MaterialIcons name="file-upload" size={18} color={isImportingSoll ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.primary} />
+                  </TouchableOpacity>
+                </View>
+                <Text style={protocolScreenStyles.sollIstValue}>{sollPerHour ?? 0}</Text>
                 <Text style={protocolScreenStyles.sollIstSubtext}>Stk/Std</Text>
               </View>
 
@@ -963,7 +1025,7 @@ const ProtocolScreen = ({ onBack }) => {
             </View>
 
             <View style={protocolScreenStyles.zeitColumn}>
-              <View style={protocolScreenStyles.zeitCard}>
+              <View style={protocolScreenStyles.sollIstCard}>
                 <Text style={protocolScreenStyles.sectionTitle}>ZEITÜBERSICHT</Text>
 
                 {/* IST START + SOLL START nebeneinander - jeweils eigene dunklere Box */}
@@ -971,7 +1033,7 @@ const ProtocolScreen = ({ onBack }) => {
                   <View style={protocolScreenStyles.zeitStartItem}>
                     <View style={protocolScreenStyles.zeitInnerBox}>
                       <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                        <MaterialIcons name="access-time" size={16} color="#3B82F6" style={{marginRight: 6}} />
+                        <MaterialIcons name="access-time" size={16} color={THEME.colors.dark.info} style={{marginRight: 6}} />
                         <Text style={protocolScreenStyles.zeitPairLabel}>IST START</Text>
                       </View>
                       <Text style={protocolScreenStyles.zeitPairValue}>
@@ -983,7 +1045,7 @@ const ProtocolScreen = ({ onBack }) => {
                   <View style={protocolScreenStyles.zeitStartItem}>
                     <View style={protocolScreenStyles.zeitInnerBox}>
                       <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                        <MaterialIcons name="access-time" size={16} color="#22C55E" style={{marginRight: 6}} />
+                        <MaterialIcons name="access-time" size={16} color={THEME.colors.dark.success} style={{marginRight: 6}} />
                         <Text style={protocolScreenStyles.zeitPairLabel}>SOLL START</Text>
                       </View>
                       <Text style={protocolScreenStyles.zeitPairValue}>--:--</Text>
@@ -1003,10 +1065,10 @@ const ProtocolScreen = ({ onBack }) => {
                   <View style={protocolScreenStyles.zeitPairItem}>
                     <View style={protocolScreenStyles.zeitInnerBox}>
                       <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                        <MaterialIcons name="show-chart" size={16} color="#22C55E" style={{marginRight: 6}} />
-                        <Text style={[protocolScreenStyles.zeitPairLabel, {color: '#22C55E'}]}>NETTO</Text>
+                        <MaterialIcons name="show-chart" size={16} color={THEME.colors.dark.success} style={{marginRight: 6}} />
+                        <Text style={[protocolScreenStyles.zeitPairLabel, {color: THEME.colors.dark.success}]}>NETTO</Text>
                       </View>
-                      <Text style={[protocolScreenStyles.zeitPairValue, {color: '#22C55E'}]}>
+                      <Text style={[protocolScreenStyles.zeitPairValue, {color: THEME.colors.dark.success}]}>
                         {formatTime(elapsed - localLogs.reduce((sum, log) => sum + (log.durationSeconds || 0), 0))}
                       </Text>
                     </View>
@@ -1018,10 +1080,10 @@ const ProtocolScreen = ({ onBack }) => {
                   <View style={protocolScreenStyles.zeitPairItem}>
                     <View style={protocolScreenStyles.zeitInnerBox}>
                       <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                        <MaterialIcons name="warning" size={16} color="#EF4444" style={{marginRight: 6}} />
-                        <Text style={[protocolScreenStyles.zeitPairLabel, {color: '#EF4444'}]}>STÖRUNG KUM.</Text>
+                        <MaterialIcons name="warning" size={16} color={THEME.colors.dark.danger} style={{marginRight: 6}} />
+                        <Text style={[protocolScreenStyles.zeitPairLabel, {color: THEME.colors.dark.danger}]}>STÖRUNG KUM.</Text>
                       </View>
-                      <Text style={[protocolScreenStyles.zeitPairValue, {color: '#EF4444'}]}>
+                      <Text style={[protocolScreenStyles.zeitPairValue, {color: THEME.colors.dark.danger}]}>
                         {Math.floor(localLogs.reduce((sum, log) => sum + (log.durationSeconds || 0), 0) / 60)} Min
                       </Text>
                     </View>
@@ -1030,10 +1092,10 @@ const ProtocolScreen = ({ onBack }) => {
                   <View style={protocolScreenStyles.zeitPairItem}>
                     <View style={protocolScreenStyles.zeitInnerBox}>
                       <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                        <MaterialIcons name="free-breakfast" size={16} color="#F59E0B" style={{marginRight: 6}} />
-                        <Text style={[protocolScreenStyles.zeitPairLabel, {color: '#F59E0B'}]}>PAUSE KUM.</Text>
+                        <MaterialIcons name="free-breakfast" size={16} color={THEME.colors.dark.warning} style={{marginRight: 6}} />
+                        <Text style={[protocolScreenStyles.zeitPairLabel, {color: THEME.colors.dark.warning}]}>PAUSE KUM.</Text>
                       </View>
-                      <Text style={[protocolScreenStyles.zeitPairValue, {color: '#F59E0B'}]}>{Math.floor(totalPauseSeconds / 60)} Min</Text>
+                      <Text style={[protocolScreenStyles.zeitPairValue, {color: THEME.colors.dark.warning}]}>{Math.floor(totalPauseSeconds / 60)} Min</Text>
                     </View>
                   </View>
                 </View>
@@ -1056,7 +1118,7 @@ const ProtocolScreen = ({ onBack }) => {
               <TextInput
                 style={protocolScreenStyles.sonstigesInput}
                 placeholder="Beschreibe die Störung..."
-                placeholderTextColor="#64748B"
+                placeholderTextColor={THEME.colors.dark.foregroundDim}
                 value={sonstigesText}
                 onChangeText={setSonstigesText}
                 multiline
@@ -1077,10 +1139,16 @@ const ProtocolScreen = ({ onBack }) => {
                     protocolScreenStyles.startButton,
                     !selectedFA && protocolScreenStyles.actionButtonDisabled,
                   ]}
-                  onPress={handleStart}
+                  onPress={() => {
+                    if (!selectedFA) {
+                      setFaSearchError('Bitte zuerst einen Fertigungsauftrag auswählen');
+                      return;
+                    }
+                    showConfirm({ title: 'Produktion starten', message: 'Produktion jetzt starten?', onConfirm: async () => { await handleStart(); } });
+                  }}
                   disabled={!selectedFA}
                 >
-                  <MaterialIcons name="play-arrow" size={20} color={selectedFA ? '#fff' : '#94A3B8'} />
+                  <MaterialIcons name="play-arrow" size={20} color={selectedFA ? THEME.colors.dark.foreground : THEME.colors.dark.foregroundMuted} />
                   <Text style={[protocolScreenStyles.actionButtonText, !selectedFA && protocolScreenStyles.actionButtonTextDisabled]}>Produktion starten</Text>
                 </TouchableOpacity>
 
@@ -1100,11 +1168,17 @@ const ProtocolScreen = ({ onBack }) => {
                     activeButton === 'start' && protocolScreenStyles.actionButtonActive,
                     !selectedFA && protocolScreenStyles.actionButtonDisabled,
                   ]}
-                  onPress={handleStart}
+                  onPress={() => {
+                    if (!selectedFA) {
+                      setFaSearchError('Bitte zuerst einen Fertigungsauftrag auswählen');
+                      return;
+                    }
+                    showConfirm({ title: 'Produktion starten', message: 'Produktion jetzt starten?', onConfirm: async () => { await handleStart(); } });
+                  }}
                   disabled={!selectedFA || activeButton === 'start'}
                   accessibilityState={{ disabled: !selectedFA }}
                 >
-                  <MaterialIcons name="play-arrow" size={20} color={selectedFA ? '#fff' : '#94A3B8'} />
+                  <MaterialIcons name="play-arrow" size={20} color={selectedFA ? THEME.colors.dark.foreground : THEME.colors.dark.foregroundMuted} />
                   <Text style={[protocolScreenStyles.actionButtonText, !selectedFA && protocolScreenStyles.actionButtonTextDisabled]}>Produktion starten</Text>
                 </TouchableOpacity>
 
@@ -1116,7 +1190,7 @@ const ProtocolScreen = ({ onBack }) => {
                   ]}
                   onPress={handleStörungClick}
                 >
-                  <MaterialIcons name="warning" size={20} color="#fff" />
+                  <MaterialIcons name="warning" size={20} color={THEME.colors.dark.foreground} />
                   <Text style={protocolScreenStyles.actionButtonText}>Störung melden</Text>
                 </TouchableOpacity>
 
@@ -1131,7 +1205,7 @@ const ProtocolScreen = ({ onBack }) => {
                   disabled={!selectedFA}
                   accessibilityState={{ disabled: !selectedFA }}
                 >
-                  <MaterialIcons name="pause" size={20} color={selectedFA ? '#fff' : '#94A3B8'} />
+                  <MaterialIcons name="pause" size={20} color={selectedFA ? THEME.colors.dark.foreground : THEME.colors.dark.foregroundMuted} />
                   <Text style={[protocolScreenStyles.actionButtonText, !selectedFA && protocolScreenStyles.actionButtonTextDisabled]}>Pause setzen</Text>
                 </TouchableOpacity>
 
@@ -1139,7 +1213,7 @@ const ProtocolScreen = ({ onBack }) => {
                   style={[protocolScreenStyles.actionButton, protocolScreenStyles.endeButton]}
                   onPress={openEndConfirm}
                 >
-                  <MaterialIcons name="stop" size={20} color="#fff" />
+                  <MaterialIcons name="stop" size={20} color={THEME.colors.dark.foreground} />
                   <Text style={protocolScreenStyles.actionButtonText}>Schicht beenden</Text>
                 </TouchableOpacity>
               </View>
@@ -1161,7 +1235,7 @@ const ProtocolScreen = ({ onBack }) => {
             <View style={protocolScreenStyles.tableTitleRow}>
               <Text style={protocolScreenStyles.sectionTitle}>STÖRUNGSPROTOKOLLE (HEUTE)</Text>
               <TouchableOpacity onPress={clearAllLocalLogs}>
-                <MaterialIcons name="delete-outline" size={24} color="#EF4444" />
+                <MaterialIcons name="delete-outline" size={24} color={THEME.colors.dark.danger} />
               </TouchableOpacity>
             </View>
 
@@ -1188,31 +1262,49 @@ const ProtocolScreen = ({ onBack }) => {
               {viewMode === 'logs' ? (
                 <>
                   <View style={protocolScreenStyles.tableHeader}>
-                    <Text style={[protocolScreenStyles.tableHeaderCell, {flex: 2}]}>Störung</Text>
-                    <Text style={protocolScreenStyles.tableHeaderCell}>Start</Text>
-                    <Text style={protocolScreenStyles.tableHeaderCell}>Ende</Text>
-                    <Text style={protocolScreenStyles.tableHeaderCell}>Dauer</Text>
+                    <View style={{width: 8}} />
+                    <Text style={[protocolScreenStyles.tableHeaderCell, {flex: 2}]}>STÖRUNG</Text>
+                    <Text style={protocolScreenStyles.tableHeaderCell}>START</Text>
+                    <Text style={protocolScreenStyles.tableHeaderCell}>ENDE</Text>
+                    <Text style={protocolScreenStyles.tableHeaderCell}>DAUER</Text>
                   </View>
                   
                   {localLogs.length === 0 ? (
                     <Text style={protocolScreenStyles.tableEmpty}>Keine Einträge für heute</Text>
                   ) : (
                     <ScrollView style={protocolScreenStyles.tableScroll} nestedScrollEnabled={true}>
-                      {localLogs.map((log) => (
-                        <View key={log.id} style={protocolScreenStyles.tableRow}>
-                          <View style={{flex: 2}}>
-                            <Text style={protocolScreenStyles.tableCell}>{log.issue}</Text>
-                            {log.notes && <Text style={protocolScreenStyles.tableNote}>{log.notes}</Text>}
+                      {localLogs.map((log) => {
+                        // Calculate duration color indicator
+                        const duration = log.durationSeconds;
+                        let indicatorColor = THEME.colors.dark.netto; // green for < 10s
+                        if (duration >= 60) indicatorColor = THEME.colors.dark.danger; // red for >= 60s
+                        else if (duration >= 10) indicatorColor = THEME.colors.dark.warning; // orange for 10-59s
+
+                        return (
+                          <View key={log.id} style={[protocolScreenStyles.tableRow, {flexDirection: 'row', alignItems: 'center'}]}>
+                            <View style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: 4,
+                              backgroundColor: indicatorColor,
+                              marginRight: 12
+                            }} />
+                            <View style={{flex: 2}}>
+                              <Text style={protocolScreenStyles.tableCell}>{log.issue}</Text>
+                              {log.notes && <Text style={protocolScreenStyles.tableNote}>{log.notes}</Text>}
+                            </View>
+                            <Text style={protocolScreenStyles.tableCell}>
+                              {new Date(log.startTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                            </Text>
+                            <Text style={protocolScreenStyles.tableCell}>
+                              {new Date(log.endTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                            </Text>
+                            <Text style={[protocolScreenStyles.tableCell, {color: indicatorColor, fontWeight: '600'}]}>
+                              {formatTime(log.durationSeconds)}
+                            </Text>
                           </View>
-                          <Text style={protocolScreenStyles.tableCell}>
-                            {new Date(log.startTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-                          </Text>
-                          <Text style={protocolScreenStyles.tableCell}>
-                            {new Date(log.endTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-                          </Text>
-                          <Text style={protocolScreenStyles.tableCell}>{formatTime(log.durationSeconds)}</Text>
-                        </View>
-                      ))}
+                        );
+                      })}
                     </ScrollView>
                   )}
                 </>
@@ -1241,11 +1333,11 @@ const ProtocolScreen = ({ onBack }) => {
       
       {/* Confirm Modal */}
       <ConfirmModal
-        visible={showEndConfirm}
-        title="Schicht beenden"
-        message="Bist du sicher, dass du die Schicht beenden möchtest?"
-        onCancel={cancelEndConfirm}
-        onConfirm={confirmEnd}
+        visible={confirmDialog.visible}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        onCancel={hideConfirm}
+        onConfirm={async () => { if (confirmDialog.onConfirm) await confirmDialog.onConfirm(); hideConfirm(); }}
       />
     </View>
   );

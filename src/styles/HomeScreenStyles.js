@@ -1,9 +1,10 @@
 import { StyleSheet } from 'react-native';
+import { THEME } from './globalStyles';
 
 export const homeScreenStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: THEME.colors.light.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -17,12 +18,12 @@ export const homeScreenStyles = StyleSheet.create({
     fontSize: 32,
     fontWeight: 'bold',
     marginBottom: 10,
-    color: '#2c3e50',
+    color: THEME.colors.light.foreground,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 18,
-    color: '#7f8c8d',
+    color: THEME.colors.light.foregroundMuted,
     marginBottom: 40,
     textAlign: 'center',
   },
@@ -33,14 +34,14 @@ export const homeScreenStyles = StyleSheet.create({
   label: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#2c3e50',
+    color: THEME.colors.light.foreground,
     marginBottom: 10,
   },
   pickerContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: THEME.colors.light.card,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: THEME.colors.light.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -51,7 +52,7 @@ export const homeScreenStyles = StyleSheet.create({
     height: 50,
   },
   submitButton: {
-    backgroundColor: '#3498db',
+    backgroundColor: THEME.colors.light.primary,
     padding: 15,
     borderRadius: 10,
     marginTop: 20,
@@ -65,7 +66,7 @@ export const homeScreenStyles = StyleSheet.create({
     zIndex: -1,
   },
   submitButtonText: {
-    color: '#fff',
+    color: THEME.colors.light.onPrimary,
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -74,10 +75,10 @@ export const homeScreenStyles = StyleSheet.create({
     zIndex: 9999,
   },
   dropdownButton: {
-    backgroundColor: '#fff',
+    backgroundColor: THEME.colors.light.card,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: THEME.colors.light.border,
     padding: 15,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -90,21 +91,21 @@ export const homeScreenStyles = StyleSheet.create({
   },
   dropdownButtonText: {
     fontSize: 16,
-    color: '#2c3e50',
+    color: THEME.colors.light.foreground,
   },
   dropdownArrow: {
     fontSize: 12,
-    color: '#7f8c8d',
+    color: THEME.colors.light.foregroundMuted,
   },
   dropdownList: {
     position: 'absolute',
     top: 60,
     left: 0,
     right: 0,
-    backgroundColor: '#fff',
+    backgroundColor: THEME.colors.light.card,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: THEME.colors.light.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -115,28 +116,27 @@ export const homeScreenStyles = StyleSheet.create({
   dropdownItem: {
     padding: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: THEME.colors.light.borderLight,
   },
-    backgroundColor: '#fff',
   dropdownItemText: {
     fontSize: 16,
-    color: '#2c3e50',
+    color: THEME.colors.light.foreground,
   },
 
   assignedLineText: {
-    backgroundColor: '#fff',
+    backgroundColor: THEME.colors.light.card,
     padding: 14,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: THEME.colors.light.border,
     textAlign: 'center',
-    color: '#2c3e50',
+    color: THEME.colors.light.foreground,
     fontWeight: '600',
   },
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: THEME.colors.light.overlayModal,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -144,7 +144,7 @@ export const homeScreenStyles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 520,
-    backgroundColor: '#fff',
+    backgroundColor: THEME.colors.light.card,
     borderRadius: 12,
     padding: 16,
     elevation: 6,
@@ -157,17 +157,17 @@ export const homeScreenStyles = StyleSheet.create({
   modalItem: {
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: THEME.colors.light.borderLight,
   },
   modalItemText: {
     fontSize: 15,
-    color: '#2c3e50',
+    color: THEME.colors.light.foreground,
   },
   modalCancel: {
     padding: 10,
   },
   modalDanger: {
-    backgroundColor: '#e53935',
+    backgroundColor: THEME.colors.light.danger,
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 8,

@@ -14,7 +14,14 @@
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.stoerungsprotokoll.app"
+    },
+    "android": {
+      "package": "com.stoerungsprotokoll.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF"
+      }
     }
   }
 }

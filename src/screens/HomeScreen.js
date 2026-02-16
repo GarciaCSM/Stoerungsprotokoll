@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { homeScreenStyles } from '../styles/HomeScreenStyles';
+import { THEME } from '../styles/globalStyles';
 import { useShift } from '../context/ShiftContext';
 import ProtocolScreen from './ProtocolScreen';
 
@@ -126,10 +127,10 @@ const HomeScreen = () => {
           {hasAssignedLine && shiftData.selectedLine ? (
             <View>
               <Text style={homeScreenStyles.assignedLineText}>{shiftData.selectedLine}</Text>
-              <Text style={{color: '#94A3B8', marginTop: 6}}>{shiftData.selectedShift} · {shiftData.selectedLeader}</Text>
+              <Text style={{color: THEME.colors.light.foregroundMuted, marginTop: 6}}>{shiftData.selectedShift} · {shiftData.selectedLeader}</Text>
             </View>
           ) : (
-            <Text style={{color: '#94A3B8'}}>Linie, Schicht und Linienführer kannst du jetzt im Protokoll oben auswählen.</Text>
+            <Text style={{color: THEME.colors.light.foregroundMuted}}>Linie, Schicht und Linienführer kannst du jetzt im Protokoll oben auswählen.</Text>
           )}
 
         </View>
@@ -155,7 +156,7 @@ const HomeScreen = () => {
                   <Text>Abbrechen</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={handleRemoveAssignment} style={homeScreenStyles.modalDanger}>
-                  <Text style={{color: '#fff'}}>Zuweisung entfernen</Text>
+                  <Text style={{color: THEME.colors.light.foreground}}>Zuweisung entfernen</Text>
                 </TouchableOpacity>
               </View>
             </View>
