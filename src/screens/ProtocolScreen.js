@@ -537,6 +537,14 @@ const ProtocolScreen = ({ onBack }) => {
     onBack();
   };
 
+  const statusInfo = stoerRunning || selectedIssue
+    ? { color: '#EF4444', text: 'Störung' }
+    : pauseRunning
+    ? { color: '#F59E0B', text: 'Pause' }
+    : running
+    ? { color: '#22C55E', text: 'Produktion' }
+    : { color: '#64748B', text: 'Bereit' };
+
   return (
     <View style={protocolScreenStyles.container}>
       {/* Header Bar */}
@@ -545,12 +553,21 @@ const ProtocolScreen = ({ onBack }) => {
           <MaterialIcons name="assessment" size={28} color="#3B82F6" />
           <Text style={protocolScreenStyles.headerTitle}>Produktions-Monitor</Text>
         </View>
+
+        <View style={protocolScreenStyles.statusIndicator} accessibilityLabel={`Status: ${statusInfo.text}`}>
+          <View style={[protocolScreenStyles.statusDot, { backgroundColor: statusInfo.color }]} />
+          <Text style={protocolScreenStyles.statusText}>{statusInfo.text}</Text>
+        </View>
+
         <Text style={protocolScreenStyles.headerTime}>
           {new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
         </Text>
       </View>
 
-      <ScrollView style={protocolScreenStyles.contentContainer}>
+      <ScrollView
+        style={protocolScreenStyles.contentContainer}
+        contentContainerStyle={protocolScreenStyles.scrollContent}
+      >
         {/* Dashboard Grid */}
         <View style={protocolScreenStyles.dashboardGrid}>
           
@@ -627,75 +644,100 @@ const ProtocolScreen = ({ onBack }) => {
             )}
           </View>
 
-          {/* SOLL / IST Cards Row - Full Width */}
-          <View style={protocolScreenStyles.sollIstRow}>
-            <View style={protocolScreenStyles.sollIstCard}>
-              <Text style={protocolScreenStyles.sollIstLabel}>SOLL</Text>
-              <Text style={protocolScreenStyles.sollIstValue}>0</Text>
-              <Text style={protocolScreenStyles.sollIstSubtext}>Stk/Std</Text>
+          {/* SOLL + IST (stacked) and Zeitübersicht (right column) */}
+          <View style={protocolScreenStyles.sollIstZeitRow}>
+            <View style={protocolScreenStyles.sollIstColumn}>
+              <View style={protocolScreenStyles.sollIstCard}>
+                <Text style={protocolScreenStyles.sollIstLabel}>SOLL</Text>
+                <Text style={protocolScreenStyles.sollIstValue}>0</Text>
+                <Text style={protocolScreenStyles.sollIstSubtext}>Stk/Std</Text>
+              </View>
+
+              <View style={[protocolScreenStyles.sollIstCard, protocolScreenStyles.sollIstCardSpacing]}>
+                <Text style={protocolScreenStyles.sollIstLabel}>IST</Text>
+                <Text style={protocolScreenStyles.sollIstValue}>0</Text>
+                <Text style={protocolScreenStyles.sollIstSubtext}>Differenz: 0</Text>
+              </View>
             </View>
-            <View style={protocolScreenStyles.sollIstCard}>
-              <Text style={protocolScreenStyles.sollIstLabel}>IST</Text>
-              <Text style={protocolScreenStyles.sollIstValue}>0</Text>
-              <Text style={protocolScreenStyles.sollIstSubtext}>Differenz: 0</Text>
+
+            <View style={protocolScreenStyles.zeitColumn}>
+              <View style={protocolScreenStyles.zeitCard}>
+                <Text style={protocolScreenStyles.sectionTitle}>ZEITÜBERSICHT</Text>
+
+                {/* IST START + SOLL START nebeneinander - jeweils eigene dunklere Box */}
+                <View style={protocolScreenStyles.zeitStartRow}>
+                  <View style={protocolScreenStyles.zeitStartItem}>
+                    <View style={protocolScreenStyles.zeitInnerBox}>
+                      <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                        <MaterialIcons name="access-time" size={16} color="#3B82F6" style={{marginRight: 6}} />
+                        <Text style={protocolScreenStyles.zeitPairLabel}>IST START</Text>
+                      </View>
+                      <Text style={protocolScreenStyles.zeitPairValue}>
+                        {mainTimerStartTime.current ? new Date(mainTimerStartTime.current).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={protocolScreenStyles.zeitStartItem}>
+                    <View style={protocolScreenStyles.zeitInnerBox}>
+                      <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                        <MaterialIcons name="access-time" size={16} color="#22C55E" style={{marginRight: 6}} />
+                        <Text style={protocolScreenStyles.zeitPairLabel}>SOLL START</Text>
+                      </View>
+                      <Text style={protocolScreenStyles.zeitPairValue}>--:--</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* BRUTTO + NETTO nebeneinander - jeweils eigene dunklere Box */}
+                <View style={protocolScreenStyles.zeitPairRow}>
+                  <View style={protocolScreenStyles.zeitPairItem}>
+                    <View style={protocolScreenStyles.zeitInnerBox}>
+                      <Text style={protocolScreenStyles.zeitPairLabel}>BRUTTO</Text>
+                      <Text style={protocolScreenStyles.zeitPairValue}>{formatTime(elapsed)}</Text>
+                    </View>
+                  </View>
+
+                  <View style={protocolScreenStyles.zeitPairItem}>
+                    <View style={protocolScreenStyles.zeitInnerBox}>
+                      <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                        <MaterialIcons name="show-chart" size={16} color="#22C55E" style={{marginRight: 6}} />
+                        <Text style={[protocolScreenStyles.zeitPairLabel, {color: '#22C55E'}]}>NETTO</Text>
+                      </View>
+                      <Text style={[protocolScreenStyles.zeitPairValue, {color: '#22C55E'}]}>
+                        {formatTime(elapsed - localLogs.reduce((sum, log) => sum + (log.durationSeconds || 0), 0))}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* STÖRUNG KUM. + PAUSE KUM. nebeneinander - jeweils eigene dunklere Box */}
+                <View style={protocolScreenStyles.zeitPairRow}>
+                  <View style={protocolScreenStyles.zeitPairItem}>
+                    <View style={protocolScreenStyles.zeitInnerBox}>
+                      <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                        <MaterialIcons name="warning" size={16} color="#EF4444" style={{marginRight: 6}} />
+                        <Text style={[protocolScreenStyles.zeitPairLabel, {color: '#EF4444'}]}>STÖRUNG KUM.</Text>
+                      </View>
+                      <Text style={[protocolScreenStyles.zeitPairValue, {color: '#EF4444'}]}>
+                        {Math.floor(localLogs.reduce((sum, log) => sum + (log.durationSeconds || 0), 0) / 60)} Min
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={protocolScreenStyles.zeitPairItem}>
+                    <View style={protocolScreenStyles.zeitInnerBox}>
+                      <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                        <MaterialIcons name="free-breakfast" size={16} color="#F59E0B" style={{marginRight: 6}} />
+                        <Text style={[protocolScreenStyles.zeitPairLabel, {color: '#F59E0B'}]}>PAUSE KUM.</Text>
+                      </View>
+                      <Text style={[protocolScreenStyles.zeitPairValue, {color: '#F59E0B'}]}>{Math.floor(totalPauseSeconds / 60)} Min</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
             </View>
           </View>
-
-          {/* Zeitübersicht Card - Full Width */}
-          <View style={protocolScreenStyles.zeitCard}>
-              <Text style={protocolScreenStyles.sectionTitle}>ZEITÜBERSICHT</Text>
-              
-              <View style={protocolScreenStyles.zeitRow}>
-                <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                  <MaterialIcons name="access-time" size={16} color="#3B82F6" style={{marginRight: 6}} />
-                  <Text style={protocolScreenStyles.zeitLabel}>IST START</Text>
-                </View>
-                <Text style={protocolScreenStyles.zeitValue}>
-                  {mainTimerStartTime.current ? new Date(mainTimerStartTime.current).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-                </Text>
-              </View>
-
-              <View style={protocolScreenStyles.zeitRow}>
-                <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                  <MaterialIcons name="access-time" size={16} color="#22C55E" style={{marginRight: 6}} />
-                  <Text style={protocolScreenStyles.zeitLabel}>SOLL START</Text>
-                </View>
-                <Text style={protocolScreenStyles.zeitValue}>--:--</Text>
-              </View>
-
-              <View style={protocolScreenStyles.zeitRow}>
-                <Text style={protocolScreenStyles.zeitLabel}>BRUTTO</Text>
-                <Text style={protocolScreenStyles.zeitValue}>{formatTime(elapsed)}</Text>
-              </View>
-
-              <View style={protocolScreenStyles.zeitRow}>
-                <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                  <MaterialIcons name="show-chart" size={16} color="#22C55E" style={{marginRight: 6}} />
-                  <Text style={[protocolScreenStyles.zeitLabel, {color: '#22C55E'}]}>NETTO</Text>
-                </View>
-                <Text style={[protocolScreenStyles.zeitValue, {color: '#22C55E'}]}>
-                  {formatTime(elapsed - localLogs.reduce((sum, log) => sum + (log.durationSeconds || 0), 0))}
-                </Text>
-              </View>
-
-              <View style={protocolScreenStyles.zeitRow}>
-                <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                  <MaterialIcons name="warning" size={16} color="#EF4444" style={{marginRight: 6}} />
-                  <Text style={[protocolScreenStyles.zeitLabel, {color: '#EF4444'}]}>STÖRUNG KUM.</Text>
-                </View>
-                <Text style={[protocolScreenStyles.zeitValue, {color: '#EF4444'}]}>
-                  {Math.floor(localLogs.reduce((sum, log) => sum + (log.durationSeconds || 0), 0) / 60)} Min
-                </Text>
-              </View>
-
-              <View style={protocolScreenStyles.zeitRow}>
-                <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                  <MaterialIcons name="free-breakfast" size={16} color="#F59E0B" style={{marginRight: 6}} />
-                  <Text style={[protocolScreenStyles.zeitLabel, {color: '#F59E0B'}]}>PAUSE KUM.</Text>
-                </View>
-                <Text style={[protocolScreenStyles.zeitValue, {color: '#F59E0B'}]}>{Math.floor(totalPauseSeconds / 60)} Min</Text>
-              </View>
-            </View>
         </View>
 
         {/* Additional Info Sections */}

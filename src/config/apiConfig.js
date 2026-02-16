@@ -1,4 +1,5 @@
 // API Configuration
+// TODO: Replace with your Render backend URL after deployment
 export const API_BASE_URL = 'http://192.168.10.127:3001/api';
 
 // API Endpoints

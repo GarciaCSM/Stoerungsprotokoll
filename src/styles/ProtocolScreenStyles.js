@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Platform } from 'react-native';
 
 // Dark Dashboard Theme
 const COLORS = {
@@ -43,6 +43,10 @@ const protocolScreenStyles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
+  // ensure there's inner scroll padding so last elements are reachable under floating controls
+  scrollContent: {
+    paddingBottom: 160,
+  },
 
   // Header Bar
   headerBar: {
@@ -83,6 +87,26 @@ const protocolScreenStyles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.foreground,
     letterSpacing: 2,
+  },
+
+  // Runtime status indicator (small LED + label)
+  statusIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 12,
+  },
+  statusDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  statusText: {
+    fontSize: 12,
+    color: COLORS.foregroundMuted,
+    fontWeight: '600',
   },
 
   // Dashboard Grid Layout
@@ -254,6 +278,34 @@ const protocolScreenStyles = StyleSheet.create({
     borderColor: COLORS.border,
     alignItems: 'center',
   },
+  sollIstCardSpacing: {
+    marginTop: 12,
+  },
+  // New layout helpers for combined SOLL/IST + Zeitübersicht row
+  sollIstZeitRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 16,
+    alignItems: 'flex-start',
+  },
+  sollIstColumn: {
+    flex: 1,
+    flexDirection: 'column',
+    justifyContent: 'flex-start',
+  },
+  zeitColumn: {
+    flex: 2,
+  },
+  zeitStartRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+  },
+  zeitStartItem: {
+    flex: 1,
+    paddingRight: 8,
+  },
   sollIstTitle: {
     fontSize: 11,
     fontWeight: '700',
@@ -304,6 +356,45 @@ const protocolScreenStyles = StyleSheet.create({
   zeitRowLast: {
     marginBottom: 0,
   },
+
+  // pair layout used for BRUTTO/NETTO and STÖRUNG/PAUSE side-by-side
+  zeitPairRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 14,
+  },
+  zeitPairItem: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  zeitPairLabel: {
+    fontSize: 13,
+    color: COLORS.foregroundMuted,
+    fontWeight: '600',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  zeitPairValue: {
+    fontSize: 16,
+    color: COLORS.foreground,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+
+  // inner box used for each Zeit‑element (dunklerer Blauton)
+  zeitInnerBox: {
+    backgroundColor: '#0E2940',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#123246',
+    width: '100%',
+  },
+
   zeitLabel: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -315,10 +406,12 @@ const protocolScreenStyles = StyleSheet.create({
     fontWeight: '500',
   },
   zeitValue: {
-    fontSize: 15,
+    fontSize: 16,
     color: COLORS.foreground,
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    letterSpacing: 0.5,
   },
 
   // Action Buttons
@@ -627,6 +720,32 @@ const protocolScreenStyles = StyleSheet.create({
   // Right Column (for dashboard grid layout)
   rightColumn: {
     flex: 1,
+  },
+
+  // Back Button (placed after ScrollView)
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.card,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginTop: 16,
+    marginHorizontal: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  backButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.foregroundMuted,
   },
 
   // Actions Section
