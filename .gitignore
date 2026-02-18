@@ -20,3 +20,7 @@ Thumbs.db
 # Editor-specific files
 .vscode/
 .idea/
+
+# Ignore local PHP API with credentials (keep a sample with no secrets)
+php-api/
+!php-api/config.example.php
