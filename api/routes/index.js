@@ -28,4 +28,14 @@ router.get('/health-db', async (req, res) => {
 router.get('/search-fa', faKoepfeController.searchFA.bind(faKoepfeController));
 router.get('/fa/:fanr', faKoepfeController.getFAByNumber.bind(faKoepfeController));
 
+// SOLL hours (reads configured filesystem / OneDrive‑sync folder or file path)
+const sollController = require('../controllers/sollController');
+router.get('/soll-hours', sollController.getSollHours.bind(sollController));
+
+// Test endpoints (local/dev only) — feed / read a simple in-memory IST counter
+const testController = require('../controllers/testController');
+router.get('/test/ist', testController.getIst.bind(testController));
+router.post('/test/ist', testController.setIst.bind(testController));
+router.post('/test/ist/increment', testController.incrementIst.bind(testController));
+
 module.exports = router;

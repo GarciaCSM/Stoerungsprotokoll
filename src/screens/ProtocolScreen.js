@@ -8,7 +8,7 @@ import { THEME } from '../styles/globalStyles';
 import { lineButtonConfig } from '../config/lineButtonConfig';
 import { MaterialIcons } from '@expo/vector-icons';
 import FAService from '../services/faService';
-import { pickAndParseSheet, buildSollMap } from '../services/excelService';
+import { pickAndParseSheet, buildSollMap, fetchSollFromServer } from '../services/excelService';
 
 const ProtocolScreen = ({ onBack }) => {
   const { shiftData, updateShiftData } = useShift();
@@ -49,7 +49,47 @@ const ProtocolScreen = ({ onBack }) => {
   // SOLL import / mapping (import from Excel tab "SOLL-STUNDEN")
   const [sollPerHour, setSollPerHour] = useState(0);
   const [sollMap, setSollMap] = useState({});
+  const [arbeitMap, setArbeitMap] = useState({});
+  const [anzahlArbeiter, setAnzahlArbeiter] = useState(null); // Anzahl Arbeiter für gewählte FA
   const [isImportingSoll, setIsImportingSoll] = useState(false);
+  const [isFetchingSoll, setIsFetchingSoll] = useState(false);
+
+  // IST (test value can be fed from backend test endpoint)
+  const [istValue, setIstValue] = useState(0);
+
+  // Helper: Stk/Min derived from SOLL (rounded to 2 decimal places)
+  const _soll = Number(sollPerHour) || 0;
+  const _elapsed = Number(elapsed) || 0;
+  const _pauseSec = Number(totalPauseSeconds) || 0;
+  const _ist = Number(istValue) || 0;
+
+  const sollPerMin = _soll > 0 ? Math.round((_soll / 60) * 100) / 100 : 0;
+
+  // Expected IST based on net production time (elapsed minus pauses)
+  const netProductionSeconds = Math.max(0, _elapsed - _pauseSec);
+  const expectedIst = _soll > 0 ? (netProductionSeconds / 3600) * _soll : 0;
+  const expectedIstRounded = Math.round(expectedIst);
+  const istDiff = _ist - expectedIstRounded;
+
+  // IST performance: deviation from expected
+  const getIstStatus = () => {
+    if (!running && _elapsed === 0) return 'neutral'; // not started yet
+    if (_soll <= 0) return 'neutral';                 // no SOLL loaded
+    if (expectedIst <= 0) return 'neutral';
+    const deviation = (expectedIst - _ist) / expectedIst; // 0 = perfect, >0 = behind
+    if (deviation <= 0.05) return 'good';    // within 5%  → grün
+    if (deviation <= 0.10) return 'warning'; // within 10% → gelb
+    return 'bad';                             // > 10%      → rot
+  };
+
+  const istStatus = getIstStatus();
+  const IST_COLORS = {
+    good:    THEME.colors.dark.success,  // #22C55E
+    warning: THEME.colors.dark.warning,  // #F59E0B
+    bad:     THEME.colors.dark.danger,   // #EF4444
+    neutral: THEME.colors.dark.foreground,
+  };
+  const istColor = IST_COLORS[istStatus];
 
   // Störung timer state
   const [stoerStart, setStoerStart] = useState(null); // timestamp ms
@@ -127,13 +167,18 @@ const ProtocolScreen = ({ onBack }) => {
     };
   }, [stoerRunning, stoerStart]);
 
-  // Load persisted SOLL mapping (if any) and apply to selected FA
+  // Load persisted SOLL mapping (if any), then try to refresh from server in background
   useEffect(() => {
     (async () => {
       try {
+        // 1. Load cached data first (instant)
         const raw = await AsyncStorage.getItem('soll_hours_map');
         const map = raw ? JSON.parse(raw) : {};
         setSollMap(map || {});
+        const rawArb = await AsyncStorage.getItem('arbeit_map');
+        const aMap = rawArb ? JSON.parse(rawArb) : {};
+        const normA = Object.fromEntries(Object.entries(aMap || {}).map(([k, v]) => [k, Number.isFinite(Number(v)) ? Math.round(Number(v)) : v]));
+        setArbeitMap(normA);
         if (selectedFA && selectedFA.ArtikelNr) {
           const v = map[selectedFA.ArtikelNr];
           if (v != null) setSollPerHour(v);
@@ -141,18 +186,56 @@ const ProtocolScreen = ({ onBack }) => {
       } catch (e) {
         console.warn('Failed to load persisted SOLL mapping', e);
       }
+
+      // 2. Silently refresh from server in background (no alert, just update)
+      try {
+        const remote = await fetchSollFromServer();
+        if (remote.ok) {
+          const map = remote.mapping || {};
+          const aMap = remote.arbeitMapping || {};
+          await AsyncStorage.setItem('soll_hours_map', JSON.stringify(map));
+          await AsyncStorage.setItem('arbeit_map', JSON.stringify(aMap));
+          setSollMap(map);
+          const normA = Object.fromEntries(Object.entries(aMap || {}).map(([k, v]) => [k, Number.isFinite(Number(v)) ? Math.round(Number(v)) : v]));
+          setArbeitMap(normA);
+        }
+      } catch (e) {
+        // silent fail – cached data already loaded above
+        console.warn('Background SOLL refresh failed', e);
+      }
     })();
   }, []);
 
-  // keep SOLL value updated when selectedFA or map changes
+  // keep SOLL + Arbeiter value updated when selectedFA or maps change
   useEffect(() => {
     if (selectedFA && selectedFA.ArtikelNr) {
-      const v = sollMap[selectedFA.ArtikelNr];
+      const lookup = String(selectedFA.ArtikelNr).trim().replace(/\s+/g, '').toUpperCase();
+      const v = sollMap[lookup];
+      const a = arbeitMap[lookup];
+      console.debug('[SOLL DEBUG] lookup=', lookup, 'soll=', v, 'arbeit=', a);
       setSollPerHour(v != null ? v : 0);
+      setAnzahlArbeiter(a != null ? Math.round(Number(a)) : null);
     } else {
       setSollPerHour(0);
+      setAnzahlArbeiter(null);
     }
-  }, [selectedFA, sollMap]);
+  }, [selectedFA, sollMap, arbeitMap]);
+
+  // Poll test IST value from backend (used by the local test feeder)
+  useEffect(() => {
+    let mounted = true;
+    let timer = setInterval(async () => {
+      try {
+        const v = await FAService.getTestIst();
+        if (mounted) setIstValue(v);
+      } catch (e) {
+        // ignore polling errors in UI
+      }
+    }, 1000);
+    // initial read
+    (async () => { try { const v = await FAService.getTestIst(); if (mounted) setIstValue(v); } catch (e) {} })();
+    return () => { mounted = false; clearInterval(timer); };
+  }, []);
 
   // Pause timer effect: track an active pause and update totalPauseSeconds while pausing
   useEffect(() => {
@@ -248,20 +331,64 @@ const ProtocolScreen = ({ onBack }) => {
       const parsed = await pickAndParseSheet('SOLL-STUNDEN');
       if (parsed.cancelled) return;
       const rows = parsed.rows || [];
-      const map = buildSollMap(rows);
+      const rowsArr = parsed.rowsArr || null;
+      const { sollMap: map, arbeitMap: aMap } = buildSollMap(rows, rowsArr);
       await AsyncStorage.setItem('soll_hours_map', JSON.stringify(map));
+      await AsyncStorage.setItem('arbeit_map', JSON.stringify(aMap));
       setSollMap(map || {});
+      const normA = Object.fromEntries(Object.entries(aMap || {}).map(([k, v]) => [k, Number.isFinite(Number(v)) ? Math.round(Number(v)) : v]));
+      setArbeitMap(normA);
       const count = Object.keys(map).length;
-      Alert.alert('Import erfolgreich', `Es wurden ${count} SOLL‑Einträge importiert.`);
-      // apply immediately if a FA is selected
-      if (selectedFA && selectedFA.ArtikelNr && map[selectedFA.ArtikelNr] != null) {
-        setSollPerHour(map[selectedFA.ArtikelNr]);
+      // build debug info for arbeits count for currently selected FA (if any)
+      let debugMsg = `Es wurden ${count} SOLL‑Einträge importiert.`;
+      if (selectedFA && selectedFA.ArtikelNr) {
+        const lookup = String(selectedFA.ArtikelNr).trim().replace(/\s+/g, '').toUpperCase();
+        const foundArb = aMap[lookup];
+        debugMsg += `\nArbeiterMapping für Artikel ${selectedFA.ArtikelNr} (Lookup ${lookup}): ${foundArb != null ? foundArb : '—'}`;
+        if (map[lookup] != null) setSollPerHour(map[lookup]);
+        if (foundArb != null) setAnzahlArbeiter(Math.round(Number(foundArb)));
       }
+      Alert.alert('Import erfolgreich', debugMsg);
     } catch (e) {
       console.warn('SOLL Import failed', e);
       Alert.alert('Import fehlgeschlagen', e.message || String(e));
     } finally {
       setIsImportingSoll(false);
+    }
+  };
+
+  // Fetch mapping from server endpoint (/api/soll-hours) — used when SharePoint file is read server‑side
+  const handleRefreshSoll = async () => {
+    setIsFetchingSoll(true);
+    try {
+      const remote = await fetchSollFromServer();
+      if (!remote.ok) {
+        const details = remote.details ? remote.details.map(d => `${d.url} → ${d.message}`).join('\n') : remote.error || 'unknown';
+        throw new Error(`${remote.error || 'Remote failed'}\nTried:\n${details}`);
+      }
+      const map = remote.mapping || {};
+      const aMap = remote.arbeitMapping || {};
+      await AsyncStorage.setItem('soll_hours_map', JSON.stringify(map));
+      await AsyncStorage.setItem('arbeit_map', JSON.stringify(aMap));
+      setSollMap(map);
+      const normA = Object.fromEntries(Object.entries(aMap || {}).map(([k, v]) => [k, Number.isFinite(Number(v)) ? Math.round(Number(v)) : v]));
+      setArbeitMap(normA);
+      const count = Object.keys(map).length;
+      // include arbeitMapping debug info for currently selected FA
+      let debugMsg = `SOLL‑Mapping vom Server geladen (${count} Einträge).\nQuelle: ${remote.source || 'server'}`;
+      if (selectedFA && selectedFA.ArtikelNr) {
+        const lookup = String(selectedFA.ArtikelNr).trim().replace(/\s+/g, '').toUpperCase();
+        const foundArb = normA[lookup];
+        debugMsg += `\nArbeiterMapping für Artikel ${selectedFA.ArtikelNr} (Lookup ${lookup}): ${foundArb != null ? foundArb : '—'}`;
+        if (map[lookup] != null) setSollPerHour(map[lookup]);
+        if (foundArb != null) setAnzahlArbeiter(foundArb);
+      }
+      Alert.alert('Aktualisiert', debugMsg);
+    } catch (e) {
+      console.warn('Remote SOLL fetch failed', e);
+      Alert.alert('Fetch fehlgeschlagen', e.message || String(e));
+    } finally {
+      setIsFetchingSoll(false);
     }
   };
 
@@ -872,6 +999,10 @@ const ProtocolScreen = ({ onBack }) => {
               <Text style={{color: THEME.colors.dark.foreground, fontWeight: '700', marginLeft: 8}}>{shiftData.selectedShift}</Text>
               <Text style={{color: THEME.colors.dark.foregroundMuted, fontSize: 11, marginLeft: 12}}>Führer</Text>
               <Text style={{color: THEME.colors.dark.foreground, fontWeight: '700', marginLeft: 8}}>{shiftData.selectedLeader}</Text>
+              <MaterialIcons name="people" size={13} color={THEME.colors.dark.foregroundMuted} style={{marginLeft: 12}} />
+              <Text style={{color: anzahlArbeiter != null ? THEME.colors.dark.foreground : THEME.colors.dark.foregroundMuted, fontWeight: '700', marginLeft: 4}}>
+                {anzahlArbeiter != null ? anzahlArbeiter : '—'}
+              </Text>
             </View>
 
             <TouchableOpacity onPress={handleEditSelection}>
@@ -1009,18 +1140,45 @@ const ProtocolScreen = ({ onBack }) => {
               <View style={protocolScreenStyles.sollIstCard}>
                 <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%'}}>
                   <Text style={protocolScreenStyles.sollIstLabel}>SOLL</Text>
-                  <TouchableOpacity onPress={handleImportSoll} disabled={isImportingSoll} style={{padding: 6}}>
-                    <MaterialIcons name="file-upload" size={18} color={isImportingSoll ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.primary} />
-                  </TouchableOpacity>
+                  <View style={{flexDirection: 'row', gap: 10}}>
+                    <TouchableOpacity onPress={handleImportSoll} disabled={isImportingSoll} style={{padding: 6}}>
+                      <MaterialIcons name="file-upload" size={18} color={isImportingSoll ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleRefreshSoll} disabled={isFetchingSoll} style={{padding: 6}}>
+                      <MaterialIcons name="autorenew" size={18} color={isFetchingSoll ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.primary} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
                 <Text style={protocolScreenStyles.sollIstValue}>{sollPerHour ?? 0}</Text>
                 <Text style={protocolScreenStyles.sollIstSubtext}>Stk/Std</Text>
+                {sollPerHour > 0 && (
+                  <Text style={[protocolScreenStyles.sollIstSubtext, {color: THEME.colors.dark.foregroundDim, fontSize: 11, marginTop: 2}]}>
+                    {sollPerMin} Stk/Min
+                  </Text>
+                )}
               </View>
 
-              <View style={[protocolScreenStyles.sollIstCard, protocolScreenStyles.sollIstCardSpacing]}>
+              <View style={[protocolScreenStyles.sollIstCard, protocolScreenStyles.sollIstCardSpacing, istStatus !== 'neutral' && {borderColor: istColor, borderWidth: 1.5}]}>
                 <Text style={protocolScreenStyles.sollIstLabel}>IST</Text>
-                <Text style={protocolScreenStyles.sollIstValue}>0</Text>
-                <Text style={protocolScreenStyles.sollIstSubtext}>Differenz: 0</Text>
+                <Text style={[protocolScreenStyles.sollIstValue, {color: istColor}]}>{_ist}</Text>
+                {istStatus !== 'neutral' && (
+                  <View style={{
+                    marginTop: 6,
+                    paddingHorizontal: 8,
+                    paddingVertical: 3,
+                    borderRadius: 6,
+                    backgroundColor: istColor + '22',
+                  }}>
+                    <Text style={{fontSize: 11, fontWeight: '700', color: istColor, textTransform: 'uppercase', letterSpacing: 0.8}}>
+                      {istStatus === 'good' ? '● Im Soll' : istStatus === 'warning' ? '▲ Leicht zurück' : '✕ Zu langsam'}
+                    </Text>
+                  </View>
+                )}
+                <Text style={protocolScreenStyles.sollIstSubtext}>
+                  {_soll > 0
+                    ? `Erwartet: ${expectedIstRounded} · Diff: ${istDiff >= 0 ? '+' : ''}${istDiff}`
+                    : 'Kein SOLL geladen'}
+                </Text>
               </View>
             </View>
 

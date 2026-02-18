@@ -83,6 +83,22 @@ class FAService {
       return false;
     }
   }
+
+  /**
+   * Test helper: read current IST value from backend test endpoint
+   * Returns numeric IST or 0 on error
+   */
+  async getTestIst() {
+    try {
+      const resp = await fetch(API_ENDPOINTS.TEST_IST);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const j = await resp.json();
+      return typeof j.ist === 'number' ? j.ist : Number(j.ist) || 0;
+    } catch (err) {
+      console.warn('getTestIst failed:', err.message || err);
+      return 0;
+    }
+  }
 }
 
 export default new FAService();

@@ -7,6 +7,8 @@ export const API_ENDPOINTS = {
   HEALTH: `${API_BASE_URL}/health`,
   SEARCH_FA: `${API_BASE_URL}/search-fa`,
   GET_FA: (fanr) => `${API_BASE_URL}/fa/${fanr}`,
+  SOLL_HOURS: `${API_BASE_URL}/soll-hours`,
+  TEST_IST: `${API_BASE_URL}/test/ist`,
 };
 
 // API Error Messages
