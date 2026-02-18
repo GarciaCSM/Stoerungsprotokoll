@@ -1,0 +1,193 @@
+import { useEffect, useRef, useCallback } from 'react';
+
+const API_BASE = 'https://cosmetic-service.com/php-api/produktion';
+const SYNC_INTERVAL_MS = 10_000; // alle 10 Sekunden
+
+/**
+ * Synct den laufenden Timer-Zustand alle 10s in die IONOS MariaDB.
+ * Störungen werden sofort nach Abschluss übertragen.
+ *
+ * Verwendung in ProtocolScreen.js:
+ *   const dbSync = useDbSync({ shiftData, timer, selectionConfirmed, selectedFA });
+ *   // Störung direkt nach saveStoerLog übertragen:
+ *   await dbSync.syncStoerung({ issue, startTime, endTime, durationSeconds, notes });
+ */
+export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA }) {
+  const syncIntervalRef = useRef(null);
+  const lastSyncedRef   = useRef(null); // verhindert doppelte Syncs bei identischem Zustand
+
+  // ── Hilfsfunktion: fetch mit Timeout ─────────────────────────────────────
+  const apiFetch = async (path, options = {}) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(`${API_BASE}${path}`, {
+        ...options,
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+      });
+      return res;
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
+
+  // ── Session-Snapshot bauen ────────────────────────────────────────────────
+  const buildSessionPayload = useCallback(() => {
+    if (!shiftData?.selectedLine || !shiftData?.selectedShift) return null;
+
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+    // timer_start_time: epoch ms → MySQL DATETIME string
+    const toDatetime = (epochMs) => {
+      if (!epochMs) return null;
+      return new Date(Number(epochMs)).toISOString().slice(0, 19).replace('T', ' ');
+    };
+
+    return {
+      linie:                shiftData.selectedLine,
+      schicht:              shiftData.selectedShift,
+      datum:                today,
+      linienfuehrer:        shiftData.selectedLeader   || null,
+      fa_nr:                selectedFA?.FANr           || null,
+      artikel_nr:           selectedFA?.ArtikelNr      || null,
+      artikel_bezeichnung:  selectedFA?.Artikelbezeichnung || null,
+
+      timer_start_time:     toDatetime(timer.mainTimerStartTime?.current),
+      elapsed_seconds:      timer.elapsed              || 0,
+      running:              timer.running ? 1 : 0,
+      active_button:        timer.activeButton         || null,
+      show_start_only:      timer.showStartOnly ? 1 : 0,
+
+      pause_running:        timer.pauseRunning ? 1 : 0,
+      pause_start_time:     null, // nicht von außen zugänglich, wird beim Reload ignoriert
+      pause_total_seconds:  timer.totalPauseSeconds    || 0,
+
+      stoerung_running:     timer.stoerRunning ? 1 : 0,
+      stoerung_start_time:  toDatetime(timer.stoerStart),
+      stoerung_aktiv_typ:   timer.selectedIssue        || null,
+      stoerung_aktiv_notiz: timer.sonstigesText        || null,
+    };
+  }, [shiftData, timer, selectedFA]);
+
+  // ── Session in DB schreiben ───────────────────────────────────────────────
+  const syncSession = useCallback(async () => {
+    if (!selectionConfirmed) return;
+    const payload = buildSessionPayload();
+    if (!payload) return;
+
+    // Nur senden wenn sich etwas geändert hat
+    const snapshot = JSON.stringify(payload);
+    if (snapshot === lastSyncedRef.current) return;
+
+    try {
+      const res = await apiFetch('/session.php', {
+        method: 'POST',
+        body: snapshot,
+      });
+      if (res.ok) {
+        lastSyncedRef.current = snapshot;
+      }
+    } catch (e) {
+      // Fehler still ignorieren – App läuft weiter
+      if (e.name !== 'AbortError') {
+        console.warn('[useDbSync] Session-Sync fehlgeschlagen:', e.message);
+      }
+    }
+  }, [selectionConfirmed, buildSessionPayload]);
+
+  // ── Störung sofort nach Abschluss übertragen ──────────────────────────────
+  const syncStoerung = useCallback(async ({ issue, startTime, endTime, durationSeconds, notes }) => {
+    if (!shiftData?.selectedLine || !shiftData?.selectedShift) return;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const lineNumber = shiftData.selectedLine?.match(/\d+/)?.[0] ?? shiftData.selectedLine;
+
+    const payload = {
+      linie:           shiftData.selectedLine,
+      linie_nummer:    lineNumber,
+      schicht:         shiftData.selectedShift,
+      datum:           today,
+      linienfuehrer:   shiftData.selectedLeader || null,
+      fa_nr:           selectedFA?.FANr         || null,
+      stoerung_typ:    issue,
+      notiz:           notes                   || null,
+      start_time:      new Date(startTime).toISOString(),
+      end_time:        new Date(endTime).toISOString(),
+      dauer_sekunden:  durationSeconds          || 0,
+    };
+
+    try {
+      await apiFetch('/stoerungen.php', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        console.warn('[useDbSync] Störung-Sync fehlgeschlagen:', e.message);
+      }
+    }
+  }, [shiftData, selectedFA]);
+
+  // ── 10s Intervall starten/stoppen ─────────────────────────────────────────
+  useEffect(() => {
+    if (!selectionConfirmed) {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+        syncIntervalRef.current = null;
+      }
+      return;
+    }
+
+    // Sofort einmal syncen wenn Schicht bestätigt wird
+    syncSession();
+
+    syncIntervalRef.current = setInterval(syncSession, SYNC_INTERVAL_MS);
+
+    return () => {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+        syncIntervalRef.current = null;
+      }
+    };
+  }, [selectionConfirmed, syncSession]);
+
+  // ── Session beim Beenden auf running=0 setzen ─────────────────────────────
+  const stopSession = useCallback(async () => {
+    if (!shiftData?.selectedLine || !shiftData?.selectedShift) return;
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      await apiFetch(
+        `/session.php?linie=${encodeURIComponent(shiftData.selectedLine)}&schicht=${encodeURIComponent(shiftData.selectedShift)}&datum=${today}`,
+        { method: 'DELETE' }
+      );
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        console.warn('[useDbSync] stopSession fehlgeschlagen:', e.message);
+      }
+    }
+  }, [shiftData]);
+
+  // ── Load session + störungen + optional SOLL aus DB (used on app-open / schichtwechsel)
+  const loadFromDb = useCallback(async (overrideLine, overrideShift) => {
+    const line = overrideLine || shiftData?.selectedLine;
+    const shift = overrideShift || shiftData?.selectedShift;
+    if (!line || !shift) return { session: null, stoerungen: null };
+    const today = new Date().toISOString().slice(0, 10);
+
+    try {
+      const sessionRes = await apiFetch(`/session.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}&datum=${today}`);
+      const session = sessionRes.status === 200 ? await sessionRes.json() : null;
+
+      const stoerRes = await apiFetch(`/stoerungen.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}&datum=${today}`);
+      const stoerungen = stoerRes.status === 200 ? await stoerRes.json() : null;
+
+      return { session, stoerungen };
+    } catch (e) {
+      console.warn('[useDbSync] loadFromDb failed', e);
+      return { session: null, stoerungen: null };
+    }
+  }, [shiftData]);
+
+  return { syncSession, syncStoerung, stopSession, loadFromDb };
+}
