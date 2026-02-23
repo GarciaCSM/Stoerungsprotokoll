@@ -62,6 +62,8 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       pause_running:        timer.pauseRunning ? 1 : 0,
       pause_start_time:     null, // nicht von außen zugänglich, wird beim Reload ignoriert
       pause_total_seconds:  timer.totalPauseSeconds    || 0,
+      // netto = brutto minus Pausen (Störungen stehen separat in der stoerungen-Tabelle)
+      netto_seconds:        Math.max(0, (timer.elapsed || 0) - (timer.totalPauseSeconds || 0)),
 
       stoerung_running:     timer.stoerRunning ? 1 : 0,
       stoerung_start_time:  toDatetime(timer.stoerStart),
@@ -75,6 +77,9 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
   // ── Session in DB schreiben ───────────────────────────────────────────────
   const syncSession = useCallback(async () => {
     if (!selectionConfirmed) return;
+    // Nicht senden wenn der Timer zurückgesetzt ist (elapsed=0, running=false) –
+    // verhindert Race-Condition nach "Schicht beenden", die netto_seconds auf 0 überschreiben würde.
+    if (!timer.running && (timer.elapsed || 0) === 0) return;
     const payload = buildSessionPayload();
     if (!payload) return;
 
@@ -155,6 +160,10 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
   }, [selectionConfirmed, syncSession]);
 
   // ── Session beim Beenden auf running=0 setzen ─────────────────────────────
+  // DELETE → PHP setzt running/stoerung_running/pause_running auf 0,
+  // lässt elapsed_seconds und alle anderen Daten aber UNANGETASTET.
+  // Der letzte 10s-Sync hat elapsed_seconds bereits korrekt in der DB,
+  // kein erneutes Schreiben aus einer möglicherweise veralteten Closure nötig.
   const stopSession = useCallback(async () => {
     if (!shiftData?.selectedLine || !shiftData?.selectedShift) return;
     const today = new Date().toISOString().slice(0, 10);

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const getPauseKey = (line, shift) => `pause_total:${line || 'none'}:${shift || 'none'}`;
@@ -19,6 +20,32 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
   const [showStartOnly, setShowStartOnly] = useState(false);
   const intervalRef = useRef(null);
   const mainTimerStartTime = useRef(null);
+  const runningRef = useRef(false); // Ref-Spiegel von `running` für Closures (z.B. AppState)
+  const appStateRef = useRef(AppState.currentState);
+
+  // ─── AppState: bei Rückkehr in den Vordergrund Intervall neu starten ────────────
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      const prev = appStateRef.current;
+      appStateRef.current = nextState;
+      if (nextState === 'active' && (prev === 'background' || prev === 'inactive')) {
+        // Nur wenn Timer wirklich läuft (nicht pausiert)
+        if (runningRef.current && mainTimerStartTime.current) {
+          // Elapsed aus absolutem Startzeitpunkt neu berechnen
+          const diffMs = Date.now() - Number(mainTimerStartTime.current);
+          setElapsed(Math.max(0, Math.floor(diffMs / 1000)));
+          // Intervall neu starten falls eingeschlafen
+          if (!intervalRef.current) {
+            intervalRef.current = setInterval(() => {
+              const d = Date.now() - (Number(mainTimerStartTime.current) || 0);
+              setElapsed(Math.max(0, Math.floor(d / 1000)));
+            }, 1000);
+          }
+        }
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   // Störung timer
   const [selectedIssue, setSelectedIssue] = useState(null);
@@ -36,8 +63,9 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
   const [totalPauseSeconds, setTotalPauseSeconds] = useState(0);
   const pauseIntervalRef = useRef(null);
 
-  // ─── Main timer interval ────────────────────────────────────────────────────
+  // ─── Main timer interval ─────────────────────────────────────────────────────
   useEffect(() => {
+    runningRef.current = running; // Ref aktuell halten
     if (running) {
       if (!mainTimerStartTime.current) {
         mainTimerStartTime.current = Date.now() - elapsed * 1000;
@@ -255,7 +283,8 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
     setPauseRunning(false);
     setPauseStart(null);
     setPauseElapsed(0);
-    if (mainTimerStartTime.current) mainTimerStartTime.current += added * 1000;
+    // mainTimerStartTime NICHT verschieben: elapsed zählt Wanduhr-Zeit,
+    // _pauseSec wird separat abgezogen → kein Doppelabzug
     return added;
   };
 
@@ -344,8 +373,15 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
 
       if (session.timer_start_time) {
         const ms = parseDatetimeToMs(session.timer_start_time);
-        mainTimerStartTime.current = ms || (Date.now() - ((session.elapsed_seconds || 0) * 1000));
-        setElapsed(Number(session.elapsed_seconds || 0));
+        if (ms) {
+          mainTimerStartTime.current = ms;
+          // Elapsed immer live aus dem absoluten Startzeitpunkt berechnen –
+          // so ist der Wert auf jedem Gerät sekundengenau, egal wie alt der DB-Eintrag ist.
+          setElapsed(Math.max(0, Math.floor((Date.now() - ms) / 1000)));
+        } else {
+          mainTimerStartTime.current = Date.now() - ((session.elapsed_seconds || 0) * 1000);
+          setElapsed(Number(session.elapsed_seconds || 0));
+        }
       } else if (session.elapsed_seconds != null) {
         mainTimerStartTime.current = Date.now() - (Number(session.elapsed_seconds) * 1000);
         setElapsed(Number(session.elapsed_seconds || 0));

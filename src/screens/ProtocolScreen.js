@@ -71,6 +71,9 @@ const ProtocolScreen = () => {
   const [isSearching, setIsSearching]           = useState(false);
   const [selectedFA, setSelectedFA]             = useState(null);
   const faInitialized = useRef(false);
+  // Wenn true: selectionConfirmed wurde für die GLEICHE Linie/Schicht neu gesetzt
+  // → useEffect darf den laufenden Timer NICHT anfassen
+  const skipTimerRestoreRef = useRef(false);
 
   // Persist FA whenever it changes — skip the very first render (null initial state)
   // to avoid overwriting the stored value before the restore effect reads it
@@ -135,7 +138,8 @@ const ProtocolScreen = () => {
   const applyDbSession = async (session) => {
     if (!session) return;
     await timer.applyRemoteSession(session);
-    if (!selectedFA && session.fa_nr) {
+    // DB gewinnt immer – FA aus Session übernehmen (überschreibt lokalen Stand)
+    if (session.fa_nr) {
       setSelectedFA({
         FANr: session.fa_nr,
         ArtikelNr: session.artikel_nr || '',
@@ -205,6 +209,11 @@ const ProtocolScreen = () => {
   //     lade Session + Störungen aus der DB (Server gewinnt laut Einstellung).
   useEffect(() => {
     if (!selectionConfirmed) return;
+    // Wenn nur der Linienführer geändert wurde (gleiche Linie+Schicht), Timer in Ruhe lassen
+    if (skipTimerRestoreRef.current) {
+      skipTimerRestoreRef.current = false;
+      return;
+    }
     let mounted = true;
     (async () => {
       try {
@@ -280,9 +289,28 @@ const ProtocolScreen = () => {
     finally   { setIsSearching(false); }
   };
 
-  const handleSelectFA = (fa) => {
-    setSelectedFA({ FANr: fa.FANr, ArtikelNr: fa.ArtikelNr, Artikelbezeichnung: fa.Artikelbezeichnung });
+  const handleSelectFA = async (fa) => {
+    const newFA = { FANr: fa.FANr, ArtikelNr: fa.ArtikelNr, Artikelbezeichnung: fa.Artikelbezeichnung };
+    setSelectedFA(newFA);
     setFaSearchText(''); setFaSearchResults([]); setFaSearchError('');
+
+    // Prüfe ob für diese FA heute auf dieser Linie/Schicht eine Session gespeichert ist.
+    // Falls ja → Brutto-Start, Netto-Zeit, Pausen, IST-Stk wiederherstellen (selbe Produktion).
+    // Falls eine andere FA gespeichert ist → Timer zurücksetzen (neue Produktion).
+    if (!shiftData?.selectedLine || !shiftData?.selectedShift) return;
+    try {
+      const { session } = await dbSync.loadFromDb();
+      if (session && session.fa_nr === fa.FANr) {
+        // Gleiche FA wie in DB → alles wiederherstellen
+        await timer.applyRemoteSession(session);
+      } else if (session && session.fa_nr && session.fa_nr !== fa.FANr) {
+        // Andere FA war gespeichert → neuer Produktionslauf → Timer zurücksetzen
+        await timer.resetTimer();
+      }
+      // Kein session → nichts tun (frischer Start)
+    } catch (e) {
+      console.warn('[handleSelectFA] DB-Session-Lookup fehlgeschlagen:', e.message);
+    }
   };
 
   //  Persist helpers 
@@ -300,44 +328,45 @@ const ProtocolScreen = () => {
     const hasActiveProduction = Boolean(timer.running || (timer.elapsed || 0) > 0 || timer.stoerRunning);
 
     const applySelection = async () => {
-      // 1) Save current (previous) selection's timer state per-shift
-      const prevLine = shiftData.selectedLine; const prevShift = shiftData.selectedShift;
-      if (prevLine && prevShift && (prevLine !== localLine || prevShift !== localShift)) {
+      const prevLine  = shiftData.selectedLine;
+      const prevShift = shiftData.selectedShift;
+      const sameSelection = (prevLine === localLine && prevShift === localShift);
+
+      // ── Gleiche Linie + Schicht: nur Linienführer aktualisieren, Timer läuft weiter ──
+      if (sameSelection) {
+        skipTimerRestoreRef.current = true; // useEffect soll Timer NICHT neu laden
+        updateShiftData({ selectedLine: localLine, selectedLeader: localLeader, selectedShift: localShift });
+        await persistLeader(localLeader);
+        await AsyncStorage.setItem('assigned_line_locked', 'true');
+        setLineLocked(true); setSelectionConfirmed(true);
+        return; // Timer nicht anfassen – Produktion läuft unverändert weiter
+      }
+
+      // ── Linie oder Schicht hat sich geändert ─────────────────────────────────────────
+
+      // 1) Vorherige Schicht speichern (pausiert)
+      if (prevLine && prevShift) {
         try {
-          // persist timer (paused) and per-shift selected FA before switching away
           await timer.saveStateForSelection(prevLine, prevShift, true);
           if (selectedFA) await AsyncStorage.setItem(`selected_fa:${prevLine}:${prevShift}`, JSON.stringify(selectedFA));
         } catch (e) { console.warn('Failed to save previous shift data', e); }
       }
-      // 2) Apply new selection locally
+
+      // 2) Neue Auswahl übernehmen
       updateShiftData({ selectedLine: localLine, selectedLeader: localLeader, selectedShift: localShift });
       await persistLine(localLine); await persistLeader(localLeader); await persistShift(localShift);
       await AsyncStorage.setItem('assigned_line_locked', 'true');
       setLineLocked(true); setSelectionConfirmed(true);
 
-      // 3) Restore per-shift timer for the newly selected shift (or reset if none)
-      try {
-        const loaded = await timer.loadStateForSelection(localLine, localShift);
-        if (!loaded) {
-          await timer.resetTimer();
-        }
-        // restore per-shift selected FA if present
-        try {
-          const rawPerFa = await AsyncStorage.getItem(`selected_fa:${localLine}:${localShift}`);
-          if (rawPerFa) {
-            try { setSelectedFA(JSON.parse(rawPerFa)); } catch {}
-          } else {
-            setSelectedFA(null);
-          }
-        } catch (e) { console.warn('Failed to restore per-shift selectedFA', e); }
-      } catch (e) { console.warn('Failed to restore timer for new selection', e); }
-
-      // 4) Load logs for the new selection and replace displayed logs with DB entries (today + same schicht)
+      // 3) DB zuerst laden – DB gewinnt immer über lokalen Cache
       loadLocalLogs(localLine, localShift);
+      let dbSessionRestored = false;
       try {
         const { session, stoerungen } = await dbSync.loadFromDb(localLine, localShift);
-        // Session (Timer + FA) aus DB wiederherstellen
-        await applyDbSession(session);
+        if (session) {
+          await applyDbSession(session);
+          dbSessionRestored = true;
+        }
         if (Array.isArray(stoerungen) && stoerungen.length) {
           const incoming = stoerungen.map(s => ({
             id: s.id || Date.now(),
@@ -356,7 +385,23 @@ const ProtocolScreen = () => {
           }));
           setLocalLogsFromServer(incoming);
         }
-      } catch (e) { console.warn('Fehler beim Laden der Störungen aus DB', e); }
+      } catch (e) { console.warn('Fehler beim Laden aus DB:', e); }
+
+      // 4) Fallback: nur wenn DB keine Session hatte → lokalen Cache; beides leer → Reset
+      if (!dbSessionRestored) {
+        try {
+          const loaded = await timer.loadStateForSelection(localLine, localShift);
+          if (!loaded) await timer.resetTimer();
+        } catch (e) { console.warn('Failed to restore timer for new selection', e); }
+        try {
+          const rawPerFa = await AsyncStorage.getItem(`selected_fa:${localLine}:${localShift}`);
+          if (rawPerFa) {
+            try { setSelectedFA(JSON.parse(rawPerFa)); } catch {}
+          } else {
+            setSelectedFA(null);
+          }
+        } catch (e) { console.warn('Failed to restore per-shift selectedFA', e); }
+      }
     };
 
     if (isChangingSelection && hasActiveProduction) {
@@ -374,6 +419,10 @@ const ProtocolScreen = () => {
 
   //  Schicht beenden 
   const handleEnde = async () => {
+    // Erst alle aktuellen Werte (elapsed, pause, IST) final in die DB schreiben,
+    // damit die Statistik später exakte Schichtdaten bekommt.
+    await dbSync.syncSession();
+    // Dann running=0 setzen (DELETE) – Zeile bleibt als Historien-Protokoll erhalten.
     await dbSync.stopSession();
     await timer.resetTimer();
     try { await AsyncStorage.removeItem('assigned_leader'); } catch {}
@@ -589,7 +638,16 @@ const ProtocolScreen = () => {
                   <Text style={[protocolScreenStyles.faSelectedLabel, { marginTop: 8 }]}>Bezeichnung</Text>
                   <Text style={protocolScreenStyles.faSelectedValue}>{selectedFA.Artikelbezeichnung}</Text>
                 </View>
-                <TouchableOpacity style={protocolScreenStyles.faRemoveButton} onPress={() => setSelectedFA(null)}>
+                <TouchableOpacity
+                  style={protocolScreenStyles.faRemoveButton}
+                  onPress={() =>
+                    showConfirm({
+                      title: 'FA entfernen',
+                      message: 'Fertigungsauftrag wirklich entfernen?',
+                      onConfirm: () => setSelectedFA(null),
+                    })
+                  }
+                >
                   <MaterialIcons name="close" size={20} color={THEME.colors.dark.danger} />
                 </TouchableOpacity>
               </View>
@@ -770,11 +828,11 @@ const ProtocolScreen = () => {
               <View style={protocolScreenStyles.buttonsRow}>
                 <TouchableOpacity
                   style={[protocolScreenStyles.actionButton, protocolScreenStyles.startButton, !selectedFA && protocolScreenStyles.actionButtonDisabled]}
-                  onPress={() => showConfirm({ title: 'Produktion starten', message: 'Produktion jetzt starten?', onConfirm: () => timer.handleStart(selectedFA, setFaSearchError, setCurrentView) })}
+                  onPress={() => showConfirm({ title: 'Weiter', message: 'Produktion fortsetzen?', onConfirm: () => timer.handleStart(selectedFA, setFaSearchError, setCurrentView) })}
                   disabled={!selectedFA}
                 >
                   <MaterialIcons name="play-arrow" size={20} color={selectedFA ? THEME.colors.dark.foreground : THEME.colors.dark.foregroundMuted} />
-                  <Text style={[protocolScreenStyles.actionButtonText, !selectedFA && protocolScreenStyles.actionButtonTextDisabled]}>Produktion starten</Text>
+                  <Text style={[protocolScreenStyles.actionButtonText, !selectedFA && protocolScreenStyles.actionButtonTextDisabled]}>Weiter</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[protocolScreenStyles.actionButton, protocolScreenStyles.modalCancel]} onPress={() => timer.handleCancelStoer(setCurrentView)}>
                   <Text style={protocolScreenStyles.modalCancelText}>Abbrechen</Text>
@@ -784,11 +842,17 @@ const ProtocolScreen = () => {
               <View style={protocolScreenStyles.buttonsRow}>
                 <TouchableOpacity
                   style={[protocolScreenStyles.actionButton, protocolScreenStyles.startButton, timer.activeButton === 'start' && protocolScreenStyles.actionButtonActive, !selectedFA && protocolScreenStyles.actionButtonDisabled]}
-                  onPress={() => showConfirm({ title: 'Produktion starten', message: 'Produktion jetzt starten?', onConfirm: () => timer.handleStart(selectedFA, setFaSearchError, setCurrentView) })}
+                  onPress={() => showConfirm({
+                    title: timer.pauseRunning ? 'Weiter' : 'Produktion starten',
+                    message: timer.pauseRunning ? 'Produktion fortsetzen?' : 'Produktion jetzt starten?',
+                    onConfirm: () => timer.handleStart(selectedFA, setFaSearchError, setCurrentView)
+                  })}
                   disabled={!selectedFA || timer.activeButton === 'start'}
                 >
                   <MaterialIcons name="play-arrow" size={20} color={selectedFA ? THEME.colors.dark.foreground : THEME.colors.dark.foregroundMuted} />
-                  <Text style={[protocolScreenStyles.actionButtonText, !selectedFA && protocolScreenStyles.actionButtonTextDisabled]}>Produktion starten</Text>
+                  <Text style={[protocolScreenStyles.actionButtonText, !selectedFA && protocolScreenStyles.actionButtonTextDisabled]}>
+                    {timer.pauseRunning ? 'Weiter' : 'Produktion starten'}
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
