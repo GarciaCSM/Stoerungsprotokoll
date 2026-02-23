@@ -2,13 +2,19 @@
 // Using local backend server on network IP (accessible from phone/emulator)
 export const API_BASE_URL = 'http://192.168.10.127:3001/api';
 
+// IONOS PHP-API base (für IST-Wert via DB)
+export const IONOS_API_BASE = 'https://cosmetic-service.com/php-api/produktion';
+
 // API Endpoints
 export const API_ENDPOINTS = {
-  HEALTH: `${API_BASE_URL}/health`,
+  HEALTH:    `${API_BASE_URL}/health`,
   SEARCH_FA: `${API_BASE_URL}/search-fa`,
-  GET_FA: (fanr) => `${API_BASE_URL}/fa/${fanr}`,
+  GET_FA:    (fanr) => `${API_BASE_URL}/fa/${fanr}`,
   SOLL_HOURS: `${API_BASE_URL}/soll-hours`,
-  TEST_IST: `${API_BASE_URL}/test/ist`,
+  TEST_IST:  `${API_BASE_URL}/test/ist`,
+  // IST direkt aus IONOS-DB (kein lokaler Node-Server nötig)
+  DB_IST: (linie, schicht, datum) =>
+    `${IONOS_API_BASE}/ist.php?linie=${encodeURIComponent(linie)}&schicht=${encodeURIComponent(schicht)}&datum=${datum}`,
 };
 
 // API Error Messages

@@ -10,7 +10,7 @@ import FAService from '../../../services/faService';
  * @param {object} opts
  * @param {object|null} opts.selectedFA - currently selected FA { FANr, ArtikelNr, ... }
  */
-export function useSollData({ selectedFA }) {
+export function useSollData({ selectedFA, shiftData }) {
   const [sollPerHour, setSollPerHour] = useState(0);
   const [sollMap, setSollMap] = useState({});
   const [arbeitMap, setArbeitMap] = useState({});
@@ -53,16 +53,24 @@ export function useSollData({ selectedFA }) {
     }
   }, [selectedFA, sollMap, arbeitMap]);
 
-  // ─── Poll IST value from backend ────────────────────────────────────────────
+  // ─── Poll IST value from IONOS DB ───────────────────────────────────────────
   useEffect(() => {
     let mounted = true;
+    const datum = new Date().toISOString().slice(0, 10);
+    const linie   = shiftData?.selectedLine;
+    const schicht = shiftData?.selectedShift;
+
     const poll = async () => {
-      try { const v = await FAService.getTestIst(); if (mounted) setIstValue(v); } catch (_) {}
+      try {
+        if (!linie || !schicht) { if (mounted) setIstValue(0); return; }
+        const v = await FAService.getDbIst(linie, schicht, datum);
+        if (mounted) setIstValue(v);
+      } catch (_) {}
     };
     poll();
     const timer = setInterval(poll, 1000);
     return () => { mounted = false; clearInterval(timer); };
-  }, []);
+  }, [shiftData?.selectedLine, shiftData?.selectedShift]);
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
   const normKey = (v) => String(v).trim().replace(/\s+/g, '').toUpperCase();

@@ -111,30 +111,60 @@ const ProtocolScreen = () => {
   // saveStoerLog mit DB-Sync wrappen – wird an useProductionTimer übergeben
   const saveStoerLogWithSync = async (args) => {
     await saveStoerLog(args);
-    // DB-Sync erfolgt nach dbSync-Initialisierung (siehe useEffect unten)
     saveStoerLogWithSyncRef.current?.(args);
   };
   const saveStoerLogWithSyncRef = useRef(null);
 
-  const timer = useProductionTimer({ shiftData, saveStoerLog: saveStoerLogWithSync });  const dbSync = useDbSync({ shiftData, timer, selectionConfirmed, selectedFA });
+  const timer = useProductionTimer({ shiftData, saveStoerLog: saveStoerLogWithSync });
+
+  // useSollData vor useDbSync – damit istValue beim Sync verfügbar ist
+  const {
+    sollPerHour, anzahlArbeiter, istValue,
+    isImportingSoll, isFetchingSoll,
+    handleImportSoll, handleRefreshSoll,
+  } = useSollData({ selectedFA, shiftData });
+
+  const dbSync = useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue });
 
   // Ref mit syncStoerung befüllen sobald dbSync bereit
   useEffect(() => {
     saveStoerLogWithSyncRef.current = dbSync.syncStoerung;
   }, [dbSync.syncStoerung]);
 
-  const {
-    sollPerHour, anzahlArbeiter, istValue,
-    isImportingSoll, isFetchingSoll,
-    handleImportSoll, handleRefreshSoll,
-  } = useSollData({ selectedFA });
+  // Hilfsfunktion: Session aus DB auf Timer + FA anwenden
+  const applyDbSession = async (session) => {
+    if (!session) return;
+    await timer.applyRemoteSession(session);
+    if (!selectedFA && session.fa_nr) {
+      setSelectedFA({
+        FANr: session.fa_nr,
+        ArtikelNr: session.artikel_nr || '',
+        Artikelbezeichnung: session.artikel_bezeichnung || '',
+      });
+    }
+  };
 
   //  Derived SOLL/IST 
   const _soll     = Number(sollPerHour) || 0;
   const _ist      = Number(istValue)    || 0;
   const _pauseSec = Number(timer.totalPauseSeconds) || 0;
   const sollPerMin = _soll > 0 ? Math.round((_soll / 60) * 100) / 100 : 0;
-  const netSec     = Math.max(0, timer.elapsed - _pauseSec);
+
+  // Frühschicht: wenn Produktion zwischen 6:00 und 6:30 gestartet wurde,
+  // rechne SOLL ab 6:00 (nicht ab tatsächlichem Start-Druck)
+  const getSollGrossElapsed = () => {
+    if (shiftData.selectedShift !== 'Frühschicht') return timer.elapsed;
+    const startTs = timer.mainTimerStartTime.current;
+    if (!startTs) return timer.elapsed;
+    const startDate = new Date(startTs);
+    const snap = new Date(startDate);
+    snap.setHours(6, 0, 0, 0);
+    const diffMin = (startDate - snap) / 60000;
+    if (diffMin < 0 || diffMin > 30) return timer.elapsed;
+    // Offset in Sekunden zwischen 6:00 und tatsächlichem Start dazuaddieren
+    return timer.elapsed + diffMin * 60;
+  };
+  const netSec = Math.max(0, getSollGrossElapsed() - _pauseSec);
   const expectedIst        = _soll > 0 ? (netSec / 3600) * _soll : 0;
   const expectedIstRounded = Math.round(expectedIst);
   const istDiff            = _ist - expectedIstRounded;
@@ -180,7 +210,8 @@ const ProtocolScreen = () => {
       try {
         const { session, stoerungen } = await dbSync.loadFromDb();
         if (!mounted) return;
-        // Per Anforderung: Session‑Daten aus DB NICHT übernehmen — nur Störungen anzeigen
+        // Session (Timer + FA) aus DB wiederherstellen
+        await applyDbSession(session);
         if (Array.isArray(stoerungen) && stoerungen.length) {
           const incoming = stoerungen.map(s => ({
             id: s.id || Date.now(),
@@ -305,7 +336,8 @@ const ProtocolScreen = () => {
       loadLocalLogs(localLine, localShift);
       try {
         const { session, stoerungen } = await dbSync.loadFromDb(localLine, localShift);
-        // per Anforderung: do NOT apply server session; only use server störungen for display
+        // Session (Timer + FA) aus DB wiederherstellen
+        await applyDbSession(session);
         if (Array.isArray(stoerungen) && stoerungen.length) {
           const incoming = stoerungen.map(s => ({
             id: s.id || Date.now(),
@@ -569,40 +601,64 @@ const ProtocolScreen = () => {
 
             {/* SOLL + IST column */}
             <View style={protocolScreenStyles.sollIstColumn}>
-              <View style={protocolScreenStyles.sollIstCard}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                  <Text style={protocolScreenStyles.sollIstLabel}>SOLL</Text>
-                  <View style={{ flexDirection: 'row', gap: 10 }}>
-                    <TouchableOpacity onPress={handleImportSoll} disabled={isImportingSoll} style={{ padding: 6 }}>
-                      <MaterialIcons name="file-upload" size={18} color={isImportingSoll ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.primary} />
+              {/* SOLL Card */}
+              <View style={[protocolScreenStyles.sollIstCard, { borderTopWidth: 3, borderTopColor: THEME.colors.dark.primary }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 4 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    <MaterialIcons name="track-changes" size={13} color={THEME.colors.dark.primary} />
+                    <Text style={protocolScreenStyles.sollIstLabel}>SOLL</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 4 }}>
+                    <TouchableOpacity onPress={handleImportSoll} disabled={isImportingSoll} style={{ padding: 5 }}>
+                      <MaterialIcons name="file-upload" size={16} color={isImportingSoll ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.primary} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={handleRefreshSoll} disabled={isFetchingSoll} style={{ padding: 6 }}>
-                      <MaterialIcons name="autorenew" size={18} color={isFetchingSoll ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.primary} />
+                    <TouchableOpacity onPress={handleRefreshSoll} disabled={isFetchingSoll} style={{ padding: 5 }}>
+                      <MaterialIcons name="autorenew" size={16} color={isFetchingSoll ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.primary} />
                     </TouchableOpacity>
                   </View>
                 </View>
-                <Text style={protocolScreenStyles.sollIstValue}>{sollPerHour ?? 0}</Text>
-                <Text style={protocolScreenStyles.sollIstSubtext}>Stk/Std</Text>
-                {_soll > 0 && (
-                  <Text style={[protocolScreenStyles.sollIstSubtext, { color: THEME.colors.dark.foregroundDim, fontSize: 11, marginTop: 2 }]}>
-                    {sollPerMin} Stk/Min
-                  </Text>
-                )}
+                <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 3 }}>
+                  <Text style={protocolScreenStyles.sollIstValue}>{_soll > 0 ? expectedIstRounded : '—'}</Text>
+                  {_soll > 0 && <Text style={{ color: THEME.colors.dark.foregroundMuted, fontSize: 13, marginBottom: 7 }}>Stk</Text>}
+                </View>
+                <Text style={{ fontSize: 11, color: THEME.colors.dark.foregroundDim, marginTop: 2 }}>
+                  {_soll > 0 ? `Vorgabe ${sollPerHour} / Std` : 'Kein SOLL geladen'}
+                </Text>
               </View>
 
-              <View style={[protocolScreenStyles.sollIstCard, protocolScreenStyles.sollIstCardSpacing, istStatus !== 'neutral' && { borderColor: istColor, borderWidth: 1.5 }]}>
-                <Text style={protocolScreenStyles.sollIstLabel}>IST</Text>
-                <Text style={[protocolScreenStyles.sollIstValue, { color: istColor }]}>{_ist}</Text>
-                {istStatus !== 'neutral' && (
-                  <View style={{ marginTop: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: istColor + '22' }}>
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: istColor, textTransform: 'uppercase', letterSpacing: 0.8 }}>
-                      {istStatus === 'good' ? ' Im Soll' : istStatus === 'warning' ? ' Leicht zurück' : ' Zu langsam'}
+              {/* IST Card */}
+              <View style={[protocolScreenStyles.sollIstCard, protocolScreenStyles.sollIstCardSpacing, { borderTopWidth: 3, borderTopColor: istStatus !== 'neutral' ? istColor : THEME.colors.dark.border }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 4 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    <MaterialIcons name="bar-chart" size={13} color={istStatus !== 'neutral' ? istColor : THEME.colors.dark.foregroundMuted} />
+                    <Text style={[protocolScreenStyles.sollIstLabel, istStatus !== 'neutral' && { color: istColor }]}>IST</Text>
+                  </View>
+                  {istStatus !== 'neutral' && (
+                    <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: istColor + '25' }}>
+                      <Text style={{ fontSize: 10, fontWeight: '700', color: istColor, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                        {istStatus === 'good' ? 'Im Soll' : istStatus === 'warning' ? 'Leicht zurück' : 'Zu langsam'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 3 }}>
+                  <Text style={[protocolScreenStyles.sollIstValue, { color: istColor }]}>{_ist}</Text>
+                  <Text style={{ color: istColor + 'AA', fontSize: 13, marginBottom: 7 }}>Stk</Text>
+                </View>
+                {_soll > 0 ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
+                    <MaterialIcons
+                      name={istDiff >= 0 ? 'arrow-upward' : 'arrow-downward'}
+                      size={13}
+                      color={istDiff >= 0 ? THEME.colors.dark.success : THEME.colors.dark.danger}
+                    />
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: istDiff >= 0 ? THEME.colors.dark.success : THEME.colors.dark.danger }}>
+                      {istDiff >= 0 ? '+' : ''}{istDiff} Stk
                     </Text>
                   </View>
+                ) : (
+                  <Text style={{ fontSize: 11, color: THEME.colors.dark.foregroundDim, marginTop: 2 }}>Kein SOLL geladen</Text>
                 )}
-                <Text style={protocolScreenStyles.sollIstSubtext}>
-                  {_soll > 0 ? `Erwartet: ${expectedIstRounded}  Diff: ${istDiff >= 0 ? '+' : ''}${istDiff}` : 'Kein SOLL geladen'}
-                </Text>
               </View>
             </View>
 
@@ -650,7 +706,7 @@ const ProtocolScreen = () => {
                         <Text style={[protocolScreenStyles.zeitPairLabel, { color: THEME.colors.dark.success }]}>NETTO</Text>
                       </View>
                       <Text style={[protocolScreenStyles.zeitPairValue, { color: THEME.colors.dark.success }]}>
-                        {formatTime(Math.max(0, timer.elapsed - _pauseSec - stoerTotalSeconds))}
+                        {selectedFA ? formatTime(Math.max(0, timer.elapsed - _pauseSec - stoerTotalSeconds)) : '--:--'}
                       </Text>
                     </View>
                   </View>
@@ -777,7 +833,36 @@ const ProtocolScreen = () => {
           <View style={protocolScreenStyles.logsSection}>
             <View style={protocolScreenStyles.tableTitleRow}>
               <Text style={protocolScreenStyles.sectionTitle}>STÖRUNGSPROTOKOLLE (HEUTE)</Text>
-              <TouchableOpacity onPress={clearAllLocalLogs}>
+              <TouchableOpacity onPress={() =>
+                showConfirm({
+                  title: 'Protokoll leeren',
+                  message: 'Einträge werden nur lokal gelöscht. Die Daten bleiben in der Datenbank und werden beim nächsten Laden wiederhergestellt. Trotzdem leeren?',
+                  onConfirm: async () => {
+                    await clearAllLocalLogs();
+                    // DB-Einträge sofort neu laden
+                    try {
+                      const { stoerungen } = await dbSync.loadFromDb();
+                      if (Array.isArray(stoerungen) && stoerungen.length) {
+                        setLocalLogsFromServer(stoerungen.map(s => ({
+                          id: s.id || Date.now(),
+                          type: 'störung',
+                          line: s.linie,
+                          lineNumber: s.linie_nummer || (s.linie?.match(/\d+/)?.[0] || s.linie),
+                          shift: s.schicht,
+                          shift_type: s.schicht,
+                          leader: s.linienfuehrer || null,
+                          issue: s.stoerung_typ,
+                          notes: s.notiz || null,
+                          startTime: new Date(s.start_time).toISOString(),
+                          endTime: new Date(s.end_time).toISOString(),
+                          durationSeconds: Number(s.dauer_sekunden || 0),
+                          createdAt: s.erstellt_am || new Date().toISOString(),
+                        })));
+                      }
+                    } catch (e) { console.warn('DB reload after clear failed', e); }
+                  },
+                })
+              }>
                 <MaterialIcons name="delete-outline" size={24} color={THEME.colors.dark.danger} />
               </TouchableOpacity>
             </View>

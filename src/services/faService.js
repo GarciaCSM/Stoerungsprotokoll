@@ -99,6 +99,28 @@ class FAService {
       return 0;
     }
   }
+
+  /**
+   * IST-Wert direkt aus IONOS-DB lesen (kein lokaler Node-Server nötig).
+   * Wird von useSollData jede Sekunde aufgerufen.
+   */
+  async getDbIst(linie, schicht, datum) {
+    try {
+      const endpointUrl = API_ENDPOINTS.DB_IST(linie, schicht, datum);
+      console.log('[getDbIst] Fetching:', endpointUrl);
+      const resp = await fetch(endpointUrl);
+      if (!resp.ok) {
+        console.warn('[getDbIst] HTTP Fehler:', resp.status, resp.statusText);
+        return 0;
+      }
+      const j = await resp.json();
+      console.log('[getDbIst] Antwort:', j);
+      return typeof j.ist === 'number' ? j.ist : Number(j.ist) || 0;
+    } catch (err) {
+      console.warn('[getDbIst] failed:', err.message || err);
+      return 0;
+    }
+  }
 }
 
 export default new FAService();

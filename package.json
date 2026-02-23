@@ -10,7 +10,8 @@
     "web": "expo start --web",
     "server": "node server.js",
     "server:dev": "nodemon server.js",
-    "test:ist": "node src/Test/ist-feeder.js --host=http://192.168.10.127:3001"
+    "test:ist": "node src/Test/ist-feeder.js --host=http://192.168.10.127:3001",
+    "test:ist-db": "node src/Test/ist-feeder-db.js"
   },
   "dependencies": {
     "@expo/webpack-config": "^18.0.1",

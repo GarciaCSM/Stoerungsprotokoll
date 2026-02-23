@@ -66,7 +66,20 @@ export function useLocalLogs({ shiftData, selectionConfirmed, localLine, localSh
 
   const clearAllLocalLogs = async () => {
     try {
-      await AsyncStorage.setItem('local_logs', JSON.stringify([]));
+      // Only remove today's entries for the current line+shift
+      const raw = await AsyncStorage.getItem('local_logs');
+      const all = raw ? JSON.parse(raw) : [];
+      const today = new Date().toDateString();
+      const line  = effectiveLine;
+      const shift = effectiveShift;
+      const remaining = all.filter(e => {
+        const isToday    = new Date(e.createdAt).toDateString() === today;
+        const sameLine   = line  ? e.line === line  : true;
+        const sameShift  = shift ? (e.shift_type === shift || e.shift === shift) : true;
+        // keep entries that are NOT (today + this line + this shift)
+        return !(isToday && sameLine && sameShift);
+      });
+      await AsyncStorage.setItem('local_logs', JSON.stringify(remaining));
       setLocalLogs([]);
     } catch (e) {
       console.warn('Failed to clear local logs', e);

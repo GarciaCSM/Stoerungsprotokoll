@@ -355,15 +355,23 @@ const protocolScreenStyles = StyleSheet.create({
     marginBottom: 12,
   },
   sollIstValue: {
-    fontSize: 64,
-    fontWeight: '700',
+    fontSize: 48,
+    fontWeight: '800',
     color: COLORS.foreground,
-    lineHeight: 64,
+    lineHeight: 52,
+    letterSpacing: -1,
   },
   sollIstSubtext: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.foregroundMuted,
-    marginTop: 8,
+    marginTop: 6,
+  },
+  sollIstLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.foregroundMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   sollIstDiff: {
     fontSize: 13,

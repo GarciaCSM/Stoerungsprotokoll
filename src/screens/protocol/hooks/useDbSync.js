@@ -12,7 +12,7 @@ const SYNC_INTERVAL_MS = 10_000; // alle 10 Sekunden
  *   // Störung direkt nach saveStoerLog übertragen:
  *   await dbSync.syncStoerung({ issue, startTime, endTime, durationSeconds, notes });
  */
-export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA }) {
+export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue }) {
   const syncIntervalRef = useRef(null);
   const lastSyncedRef   = useRef(null); // verhindert doppelte Syncs bei identischem Zustand
 
@@ -67,6 +67,8 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA }) 
       stoerung_start_time:  toDatetime(timer.stoerStart),
       stoerung_aktiv_typ:   timer.selectedIssue        || null,
       stoerung_aktiv_notiz: timer.sonstigesText        || null,
+
+      ist_wert:             (istValue != null && istValue !== 0) ? Number(istValue) : null,
     };
   }, [shiftData, timer, selectedFA]);
 

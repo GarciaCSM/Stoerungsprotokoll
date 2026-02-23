@@ -1,6 +1,6 @@
 -- ============================================================
---  Störungsprotokoll App    Datenbank-Schema
---  Präfix: stprot_
+--  Stï¿½rungsprotokoll App    Datenbank-Schema
+--  Prï¿½fix: stprot_
 --  Datenbank: MariaDB (IONOS)
 -- ============================================================
 
@@ -36,12 +36,13 @@ CREATE TABLE IF NOT EXISTS stprot_produktion_session (
     pause_start_time        DATETIME        DEFAULT NULL,
     pause_total_seconds     INT             NOT NULL DEFAULT 0,
 
-    -- Aktive Störung (laufend, noch nicht abgeschlossen)
+    -- Aktive Stï¿½rung (laufend, noch nicht abgeschlossen)
     stoerung_running        TINYINT(1)      NOT NULL DEFAULT 0,
     stoerung_start_time     DATETIME        DEFAULT NULL,
     stoerung_aktiv_typ      VARCHAR(200)    DEFAULT NULL,
     stoerung_aktiv_notiz    VARCHAR(500)    DEFAULT NULL,
-
+    -- IST-Wert (letzter bekannter StÃ¼ckzahl-Stand beim Sync)
+    ist_wert                INT             DEFAULT NULL,
     -- Zeitstempel
     erstellt_am             DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     aktualisiert_am         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -52,7 +53,7 @@ CREATE TABLE IF NOT EXISTS stprot_produktion_session (
 
 -- ============================================================
 --  2. stprot_stoerungen
---     Jede abgeschlossene Störung als eigene Zeile.
+--     Jede abgeschlossene Stï¿½rung als eigene Zeile.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS stprot_stoerungen (
     id                  INT             NOT NULL AUTO_INCREMENT PRIMARY KEY,

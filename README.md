@@ -43,31 +43,50 @@ npm install
 # 2. Datenbankverbindung testen
 node test-db.js
 
-# 3. Backend starten (neues Terminal)
+# 3. Optional: Php‑API auf IONOS deployen (kopiere php-api/*.php and config.php)
+#    führe ggf. Migration aus:
+#    mysql -u user -p dbname < scripts/migrate_add_ist_wert.sql
+
+# 4. Backend starten (lokaler Node für Tests)
 npm run server
 
-# 4. Frontend starten (neues Terminal)
+# 5. Frontend starten (neues Terminal)
 npm start
 ```
 
 ## 🔌 API Endpoints
 
+### Node/Express (lokal)
 - `GET /api/health` - Health Check
 - `GET /api/search-fa?query=XXX` - FA-Nummern suchen
 - `GET /api/fa/:fanr` - Spezifische FA-Details
+
+### PHP (IONOS, produziert Daten)
+- `/php-api/produktion/session.php` - UPSERT/GET/DELETE session
+- `/php-api/produktion/stoerungen.php` - CRUD für Störungen
+- `/php-api/produktion/soll.php`      - SOLL sync helper
+- `/php-api/produktion/ist.php`       - IST counter endpoint
+
+> Die App synchronisiert alle 10 s den Timer und lädt beim Start oder Schichtwechsel
+die Session + Störungen aus der Datenbank.
 
 ## 📱 Features
 
 - ✅ Persistente Linienzuweisung pro Tablet
 - ✅ Timer läuft auch bei geschlossener App
+- ✅ Hybrid‑Sync: lokale und MariaDB-Session (Timer, FA, Pause, IST)
+- ✅ SOLL‑Werte per Excel oder Server laden, pro FA
+- ✅ IST‑Zähler im Tablet + DB (über `ist.php`) – bleibt beim Neustart erhalten
+- ✅ Per‑Schicht Timer‑State & FA, mit Schichtwechsel‑Bestätigung
 - ✅ FA-Nummern-Suche in metaARGON DB (Status 30, 35, 36)
 - ✅ Störungserfassung mit Zeittracking
 - ✅ Lokale Logs & Statistiken
+- ✅ DB-Wiederherstellung nach App‑Crash/Schichtwechsel
 
 ## 🛠️ Konfiguration
 
 **Backend-URL ändern:**
-`src/config/apiConfig.js` → `API_BASE_URL`
+`src/config/apiConfig.js` → `API_BASE_URL` (Node) und `IONOS_API_BASE` (PHP)
 
 **ODBC-Verbindung:**
 `.env` → `ODBC_CONNECTION_STRING`
@@ -75,6 +94,14 @@ npm start
 **Störungstypen:**
 `src/config/lineButtonConfig.js`
 
+**PHP‑API konfigurieren:**
+Kopie `php-api/config.example.php` → `config.php` mit IONOS DB-Zugang.
+
+**SOLL‑Daten:**
+Import per Excel‑Upload im Frontend oder via Node‑Script `npm run server` → PATCH `/api/soll-hours`.
+
+**IST‑Test:**
+Lokaler Node: `npm run test:ist` oder DB‑Variante `npm run test:ist-db`.
 ## 📄 Lizenz
 
 Internes Projekt
