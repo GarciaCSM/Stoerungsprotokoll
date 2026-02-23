@@ -61,12 +61,6 @@ npm start
 - `GET /api/search-fa?query=XXX` - FA-Nummern suchen
 - `GET /api/fa/:fanr` - Spezifische FA-Details
 
-### PHP (IONOS, produziert Daten)
-- `/php-api/produktion/session.php` - UPSERT/GET/DELETE session
-- `/php-api/produktion/stoerungen.php` - CRUD für Störungen
-- `/php-api/produktion/soll.php`      - SOLL sync helper
-- `/php-api/produktion/ist.php`       - IST counter endpoint
-
 > Die App synchronisiert alle 10 s den Timer und lädt beim Start oder Schichtwechsel
 die Session + Störungen aus der Datenbank.
 
@@ -93,9 +87,6 @@ die Session + Störungen aus der Datenbank.
 
 **Störungstypen:**
 `src/config/lineButtonConfig.js`
-
-**PHP‑API konfigurieren:**
-Kopie `php-api/config.example.php` → `config.php` mit IONOS DB-Zugang.
 
 **SOLL‑Daten:**
 Import per Excel‑Upload im Frontend oder via Node‑Script `npm run server` → PATCH `/api/soll-hours`.
