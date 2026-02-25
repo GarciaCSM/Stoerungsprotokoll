@@ -173,11 +173,12 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
             setElapsed(Math.max(0, Math.floor((now - startNum) / 1000)));
           }
           setRunning(true);
-          setActiveButton(ts.activeButton || 'start');
+          // Wenn Pause aktiv war: activeButton muss 'pause' sein, nicht 'start'
+          setActiveButton(ts.pauseRunning ? 'pause' : (ts.activeButton || 'start'));
         } else {
           setElapsed(Math.max(0, ts.elapsed || 0));
           setRunning(false);
-          setActiveButton(ts.activeButton || null);
+          setActiveButton(ts.pauseRunning ? 'pause' : (ts.activeButton || null));
         }
 
         if (ts.selectedIssue) { setSelectedIssue(ts.selectedIssue); setShowStartOnly(true); }
@@ -201,9 +202,12 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
 
         const pauseStartNum = Number(ts.pauseStart) || null;
         if (ts.pauseRunning && ts.pauseLine === shiftData.selectedLine && ts.pauseShift === shiftData.selectedShift) {
-          setPauseStart(pauseStartNum);
+          const resolvedPauseStart = pauseStartNum || now;
+          setPauseStart(resolvedPauseStart);
           setPauseRunning(true);
-          setPauseElapsed(Math.max(0, Math.floor((now - pauseStartNum) / 1000)));
+          setPauseElapsed(Math.max(0, Math.floor((now - resolvedPauseStart) / 1000)));
+          // Sicherstellen dass activeButton 'pause' ist wenn Pause aktiv
+          setActiveButton('pause');
         }
       } catch (e) {
         console.warn('Failed to load timer state', e);
@@ -241,9 +245,11 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
 
         const pauseStartNum = Number(ts.pauseStart) || null;
         if (ts.pauseRunning && ts.pauseLine === shiftData.selectedLine && ts.pauseShift === shiftData.selectedShift) {
-          setPauseStart(pauseStartNum);
+          const resolvedPauseStart = pauseStartNum || now;
+          setPauseStart(resolvedPauseStart);
           setPauseRunning(true);
-          setPauseElapsed(Math.max(0, Math.floor((now - pauseStartNum) / 1000)));
+          setPauseElapsed(Math.max(0, Math.floor((now - resolvedPauseStart) / 1000)));
+          setActiveButton('pause');
         }
       } catch (e) {
         console.warn('Failed to re-restore timer state after shift load', e);
@@ -392,11 +398,17 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
       setShowStartOnly(Boolean(Number(session.show_start_only || 0)));
 
       setTotalPauseSeconds(Number(session.pause_total_seconds || 0));
-      setPauseRunning(Boolean(Number(session.pause_running || 0)));
-      // pause_start_time currently not persisted in DB — keep local pauseStart null unless DB provided
+      const pauseIsRunning = Boolean(Number(session.pause_running || 0));
+      setPauseRunning(pauseIsRunning);
+      if (pauseIsRunning) {
+        // activeButton muss 'pause' sein damit der Weiter-Button nicht disabled ist
+        setActiveButton('pause');
+      }
       if (session.pause_start_time) {
         const pms = parseDatetimeToMs(session.pause_start_time);
-        setPauseStart(pms || null);
+        setPauseStart(pms || (pauseIsRunning ? Date.now() : null));
+      } else if (pauseIsRunning) {
+        setPauseStart(Date.now());
       }
 
       setStoerRunning(Boolean(Number(session.stoerung_running || 0)));

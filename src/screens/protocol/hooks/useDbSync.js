@@ -15,6 +15,7 @@ const SYNC_INTERVAL_MS = 10_000; // alle 10 Sekunden
 export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue }) {
   const syncIntervalRef = useRef(null);
   const lastSyncedRef   = useRef(null); // verhindert doppelte Syncs bei identischem Zustand
+  const lastIstRef      = useRef(0);   // zuletzt erfolgreich in die DB geschriebener IST-Wert
 
   // ── Hilfsfunktion: fetch mit Timeout ─────────────────────────────────────
   const apiFetch = async (path, options = {}) => {
@@ -70,7 +71,18 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       stoerung_aktiv_typ:   timer.selectedIssue        || null,
       stoerung_aktiv_notiz: timer.sonstigesText        || null,
 
-      ist_wert:             (istValue != null && istValue !== 0) ? Number(istValue) : null,
+      // only send IST when we have a positive number and it has increased since
+      // the last sync. this prevents a stale tablet value from rolling the
+      // value backwards in the database (the server also guards with
+      // GREATEST, but this reduces unnecessary writes).
+      ist_wert: (() => {
+        const v = istValue != null ? Number(istValue) : null;
+        if (v != null && v > 0 && v > lastIstRef.current) {
+          lastIstRef.current = v;
+          return v;
+        }
+        return null;
+      })(),
     };
   }, [shiftData, timer, selectedFA]);
 

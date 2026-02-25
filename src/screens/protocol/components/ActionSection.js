@@ -99,7 +99,7 @@ export default function ActionSection({
                   message: timer.pauseRunning ? 'Produktion fortsetzen?' : 'Produktion jetzt starten?',
                   onConfirm: () => timer.handleStart(selectedFA, setFaSearchError, setCurrentView),
                 })}
-                disabled={!selectedFA || timer.activeButton === 'start'}
+                disabled={!selectedFA || (timer.activeButton === 'start' && !timer.pauseRunning)}
               >
                 <MaterialIcons name="play-arrow" size={20} color={selectedFA ? THEME.colors.dark.foreground : THEME.colors.dark.foregroundMuted} />
                 <Text style={[s.actionButtonText, !selectedFA && s.actionButtonTextDisabled]}>

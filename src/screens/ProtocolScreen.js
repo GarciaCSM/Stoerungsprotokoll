@@ -20,8 +20,8 @@ import SollIstZeitRow from './protocol/components/SollIstZeitRow';
 import ActionSection  from './protocol/components/ActionSection';
 import LogsSection    from './protocol/components/LogsSection';
 
-// Adresse des Raspberry-Pi/Node-Servers, der Kontext (Linie/Schicht)
-// vom Tablet empf�ngt und dann den Sensor-Increment weiterleitet.
+// Adresse des Raspberry‑Pi/Node‑Servers, der Kontext (Linie/Schicht)
+// vom Tablet empfängt und dann den Sensor‑Increment weiterleitet.
 // Leer lassen deaktiviert die Benachrichtigung.
 const PI_SERVER_URL = 'http://192.168.10.127:3001'; // dev: gleicher Server wie FA-Suche
 
@@ -51,7 +51,7 @@ const ProtocolScreen = () => {
 
   //  Confirm dialog 
   const [confirmDialog, setConfirmDialog] = useState({ visible: false, title: '', message: '', onConfirm: null });
-  const showConfirm = ({ title = 'Best�tigen', message = 'Bist du sicher?', onConfirm = null }) =>
+  const showConfirm = ({ title = 'Bestätigen', message = 'Bist du sicher?', onConfirm = null }) =>
     setConfirmDialog({ visible: true, title, message, onConfirm });
   const hideConfirm = () => setConfirmDialog(prev => ({ ...prev, visible: false, onConfirm: null }));
 
@@ -62,11 +62,11 @@ const ProtocolScreen = () => {
   const [isSearching, setIsSearching]           = useState(false);
   const [selectedFA, setSelectedFA]             = useState(null);
   const faInitialized = useRef(false);
-  // Wenn true: selectionConfirmed wurde f�r die GLEICHE Linie/Schicht neu gesetzt
-  // ? useEffect darf den laufenden Timer NICHT anfassen
+  // Wenn true: selectionConfirmed wurde für die GLEICHE Linie/Schicht neu gesetzt
+  // → useEffect darf den laufenden Timer NICHT anfassen
   const skipTimerRestoreRef = useRef(false);
 
-  // Persist FA whenever it changes � skip the very first render (null initial state)
+  // Persist FA whenever it changes — skip the very first render (null initial state)
   // to avoid overwriting the stored value before the restore effect reads it
   useEffect(() => {
     if (!faInitialized.current) {
@@ -102,7 +102,7 @@ const ProtocolScreen = () => {
     setLocalLogsFromServer,
   } = useLocalLogs({ shiftData, selectionConfirmed, localLine, localShift });
 
-  // saveStoerLog mit DB-Sync wrappen � wird an useProductionTimer �bergeben
+  // saveStoerLog mit DB-Sync wrappen – wird an useProductionTimer übergeben
   const saveStoerLogWithSync = async (args) => {
     await saveStoerLog(args);
     saveStoerLogWithSyncRef.current?.(args);
@@ -111,7 +111,7 @@ const ProtocolScreen = () => {
 
   const timer = useProductionTimer({ shiftData, saveStoerLog: saveStoerLogWithSync });
 
-  // useSollData vor useDbSync � damit istValue beim Sync verf�gbar ist
+  // useSollData vor useDbSync – damit istValue beim Sync verfügbar ist
   const {
     sollPerHour, anzahlArbeiter, istValue,
     isImportingSoll, isFetchingSoll,
@@ -120,7 +120,7 @@ const ProtocolScreen = () => {
 
   const dbSync = useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue });
 
-  // Ref mit syncStoerung bef�llen sobald dbSync bereit
+  // Ref mit syncStoerung befüllen sobald dbSync bereit
   useEffect(() => {
     saveStoerLogWithSyncRef.current = dbSync.syncStoerung;
   }, [dbSync.syncStoerung]);
@@ -129,7 +129,7 @@ const ProtocolScreen = () => {
   const applyDbSession = async (session) => {
     if (!session) return;
     await timer.applyRemoteSession(session);
-    // DB gewinnt immer � FA aus Session �bernehmen (�berschreibt lokalen Stand)
+    // DB gewinnt immer – FA aus Session übernehmen (überschreibt lokalen Stand)
     if (session.fa_nr) {
       setSelectedFA({
         FANr: session.fa_nr,
@@ -145,10 +145,10 @@ const ProtocolScreen = () => {
   const _pauseSec = Number(timer.totalPauseSeconds) || 0;
   const sollPerMin = _soll > 0 ? Math.round((_soll / 60) * 100) / 100 : 0;
 
-  // Fr�hschicht: wenn Produktion zwischen 6:00 und 6:30 gestartet wurde,
-  // rechne SOLL ab 6:00 (nicht ab tats�chlichem Start-Druck)
+  // Frühschicht: wenn Produktion zwischen 6:00 und 6:30 gestartet wurde,
+  // rechne SOLL ab 6:00 (nicht ab tatsächlichem Start-Druck)
   const getSollGrossElapsed = () => {
-    if (shiftData.selectedShift !== 'Fr�hschicht') return timer.elapsed;
+    if (shiftData.selectedShift !== 'Frühschicht') return timer.elapsed;
     const startTs = timer.mainTimerStartTime.current;
     if (!startTs) return timer.elapsed;
     const startDate = new Date(startTs);
@@ -156,10 +156,10 @@ const ProtocolScreen = () => {
     snap.setHours(6, 0, 0, 0);
     const diffMin = (startDate - snap) / 60000;
     if (diffMin < 0 || diffMin > 30) return timer.elapsed;
-    // Offset in Sekunden zwischen 6:00 und tats�chlichem Start dazuaddieren
+    // Offset in Sekunden zwischen 6:00 und tatsächlichem Start dazuaddieren
     return timer.elapsed + diffMin * 60;
   };
-  // SOLL basiert auf Brutto-Zeit (kein _pauseSec-Abzug ? kein R�ckw�rtssprung beim Weiter-Dr�cken)
+  // SOLL basiert auf Brutto-Zeit (kein _pauseSec-Abzug → kein Rückwärtssprung beim Weiter-Drücken)
   const netSec = getSollGrossElapsed();
   const expectedIst        = _soll > 0 ? (netSec / 3600) * _soll : 0;
   const expectedIstRounded = Math.round(expectedIst);
@@ -180,7 +180,7 @@ const ProtocolScreen = () => {
   const effectiveShift = selectionConfirmed ? shiftData.selectedShift : localShift;
 
   const statusInfo = timer.stoerRunning || timer.selectedIssue
-    ? { color: THEME.colors.dark.danger,  text: 'St�rung'    }
+    ? { color: THEME.colors.dark.danger,  text: 'Störung'    }
     : timer.pauseRunning
     ? { color: THEME.colors.dark.warning, text: 'Pause'      }
     : timer.running
@@ -197,11 +197,11 @@ const ProtocolScreen = () => {
     timer.restorePauseTotalsForSelection(shiftData.selectedLine, shiftData.selectedShift);
   }, [shiftData.selectedLine, shiftData.selectedShift, localLine, localShift, selectionConfirmed]);
 
-  // -- Wenn Schicht best�tigt ist (oder App neu ge�ffnet w�hrend Schicht l�uft):
-  //     lade Session + St�rungen aus der DB (Server gewinnt laut Einstellung).
+  // ── Wenn Schicht bestätigt ist (oder App neu geöffnet während Schicht läuft):
+  //     lade Session + Störungen aus der DB (Server gewinnt laut Einstellung).
   useEffect(() => {
     if (!selectionConfirmed) return;
-    // Wenn nur der Linienf�hrer ge�ndert wurde (gleiche Linie+Schicht), Timer in Ruhe lassen
+    // Wenn nur der Linienführer geändert wurde (gleiche Linie+Schicht), Timer in Ruhe lassen
     if (skipTimerRestoreRef.current) {
       skipTimerRestoreRef.current = false;
       return;
@@ -216,7 +216,7 @@ const ProtocolScreen = () => {
         if (Array.isArray(stoerungen) && stoerungen.length) {
           const incoming = stoerungen.map(s => ({
             id: s.id || Date.now(),
-            type: 'st�rung',
+            type: 'störung',
             line: s.linie,
             lineNumber: s.linie_nummer || (s.linie?.match(/\d+/)?.[0] || s.linie),
             shift: s.schicht,
@@ -230,7 +230,7 @@ const ProtocolScreen = () => {
             createdAt: s.erstellt_am || new Date().toISOString(),
           }));
 
-          // Nur DB-St�rungen anzeigen (ersetze die aktuell angezeigten Logs)
+          // Nur DB‑Störungen anzeigen (ersetze die aktuell angezeigten Logs)
           setLocalLogsFromServer(incoming);
         }
       } catch (e) {
@@ -261,7 +261,7 @@ const ProtocolScreen = () => {
         if (assigned && leader && shift) {
           updateShiftData({ selectedLine: assigned, selectedLeader: leader, selectedShift: shift });
           setSelectionConfirmed(true);
-          // Pi-Server beim App-Start sofort �ber aktuelle Linie/Schicht informieren
+          // Pi-Server beim App-Start sofort über aktuelle Linie/Schicht informieren
           if (PI_SERVER_URL) {
             fetch(`${PI_SERVER_URL}/context`, {
               method: 'POST',
@@ -282,7 +282,7 @@ const ProtocolScreen = () => {
     try {
       const data = await FAService.searchFA(faSearchText);
       if (data.success) {
-        if (data.results.length === 0) setFaSearchError('FA nicht gefunden oder Status ung�ltig (erlaubt: 30, 35, 36)');
+        if (data.results.length === 0) setFaSearchError('FA nicht gefunden oder Status ungültig (erlaubt: 30, 35, 36)');
         else setFaSearchResults(data.results);
       } else { setFaSearchError(data.error || 'Fehler beim Suchen'); }
     } catch { setFaSearchError('Verbindungsfehler zum Server. Ist das Backend gestartet?'); }
@@ -294,20 +294,20 @@ const ProtocolScreen = () => {
     setSelectedFA(newFA);
     setFaSearchText(''); setFaSearchResults([]); setFaSearchError('');
 
-    // Pr�fe ob f�r diese FA heute auf dieser Linie/Schicht eine Session gespeichert ist.
-    // Falls ja ? Brutto-Start, Netto-Zeit, Pausen, IST-Stk wiederherstellen (selbe Produktion).
-    // Falls eine andere FA gespeichert ist ? Timer zur�cksetzen (neue Produktion).
+    // Prüfe ob für diese FA heute auf dieser Linie/Schicht eine Session gespeichert ist.
+    // Falls ja → Brutto-Start, Netto-Zeit, Pausen, IST-Stk wiederherstellen (selbe Produktion).
+    // Falls eine andere FA gespeichert ist → Timer zurücksetzen (neue Produktion).
     if (!shiftData?.selectedLine || !shiftData?.selectedShift) return;
     try {
       const { session } = await dbSync.loadFromDb();
       if (session && session.fa_nr === fa.FANr) {
-        // Gleiche FA wie in DB ? alles wiederherstellen
+        // Gleiche FA wie in DB → alles wiederherstellen
         await timer.applyRemoteSession(session);
       } else if (session && session.fa_nr && session.fa_nr !== fa.FANr) {
-        // Andere FA war gespeichert ? neuer Produktionslauf ? Timer zur�cksetzen
+        // Andere FA war gespeichert → neuer Produktionslauf → Timer zurücksetzen
         await timer.resetTimer();
       }
-      // Kein session ? nichts tun (frischer Start)
+      // Kein session → nichts tun (frischer Start)
     } catch (e) {
       console.warn('[handleSelectFA] DB-Session-Lookup fehlgeschlagen:', e.message);
     }
@@ -332,17 +332,17 @@ const ProtocolScreen = () => {
       const prevShift = shiftData.selectedShift;
       const sameSelection = (prevLine === localLine && prevShift === localShift);
 
-      // -- Gleiche Linie + Schicht: nur Linienf�hrer aktualisieren, Timer l�uft weiter --
+      // ── Gleiche Linie + Schicht: nur Linienführer aktualisieren, Timer läuft weiter ──
       if (sameSelection) {
         skipTimerRestoreRef.current = true; // useEffect soll Timer NICHT neu laden
         updateShiftData({ selectedLine: localLine, selectedLeader: localLeader, selectedShift: localShift });
         await persistLeader(localLeader);
         await AsyncStorage.setItem('assigned_line_locked', 'true');
         setLineLocked(true); setSelectionConfirmed(true);
-        return; // Timer nicht anfassen � Produktion l�uft unver�ndert weiter
+        return; // Timer nicht anfassen – Produktion läuft unverändert weiter
       }
 
-      // -- Linie oder Schicht hat sich ge�ndert -----------------------------------------
+      // ── Linie oder Schicht hat sich geändert ─────────────────────────────────────────
 
       // 1) Vorherige Schicht speichern (pausiert)
       if (prevLine && prevShift) {
@@ -352,13 +352,13 @@ const ProtocolScreen = () => {
         } catch (e) { console.warn('Failed to save previous shift data', e); }
       }
 
-      // 2) Neue Auswahl �bernehmen
+      // 2) Neue Auswahl übernehmen
       updateShiftData({ selectedLine: localLine, selectedLeader: localLeader, selectedShift: localShift });
       await persistLine(localLine); await persistLeader(localLeader); await persistShift(localShift);
       await AsyncStorage.setItem('assigned_line_locked', 'true');
       setLineLocked(true); setSelectionConfirmed(true);
 
-      // inform Pi-Server �ber aktualisierte Linie/Schicht
+      // inform Pi‑Server über aktualisierte Linie/Schicht
       if (PI_SERVER_URL) {
         fetch(`${PI_SERVER_URL}/context`, {
           method: 'POST',
@@ -367,7 +367,7 @@ const ProtocolScreen = () => {
         }).catch(() => {});
       }
 
-      // 3) DB zuerst laden � DB gewinnt immer �ber lokalen Cache
+      // 3) DB zuerst laden – DB gewinnt immer über lokalen Cache
       loadLocalLogs(localLine, localShift);
       let dbSessionRestored = false;
       try {
@@ -379,7 +379,7 @@ const ProtocolScreen = () => {
         if (Array.isArray(stoerungen) && stoerungen.length) {
           const incoming = stoerungen.map(s => ({
             id: s.id || Date.now(),
-            type: 'st�rung',
+            type: 'störung',
             line: s.linie,
             lineNumber: s.linie_nummer || (s.linie?.match(/\d+/)?.[0] || s.linie),
             shift: s.schicht,
@@ -396,7 +396,7 @@ const ProtocolScreen = () => {
         }
       } catch (e) { console.warn('Fehler beim Laden aus DB:', e); }
 
-      // 4) Fallback: nur wenn DB keine Session hatte ? lokalen Cache; beides leer ? Reset
+      // 4) Fallback: nur wenn DB keine Session hatte → lokalen Cache; beides leer → Reset
       if (!dbSessionRestored) {
         try {
           const loaded = await timer.loadStateForSelection(localLine, localShift);
@@ -415,25 +415,25 @@ const ProtocolScreen = () => {
 
     if (isChangingSelection && hasActiveProduction) {
       showConfirm({
-        title: 'Schichtwechsel best�tigen',
-        message: 'Auf der aktuellen Schicht l�uft noch Produktion. Beim Wechsel wird der aktuelle Timer f�r die alte Schicht gespeichert. Trotzdem wechseln?',
+        title: 'Schichtwechsel bestätigen',
+        message: 'Auf der aktuellen Schicht läuft noch Produktion. Beim Wechsel wird der aktuelle Timer für die alte Schicht gespeichert. Trotzdem wechseln?',
         onConfirm: applySelection,
       });
       return;
     }
 
-    // no confirmation required ? apply immediately
+    // no confirmation required → apply immediately
     await applySelection();
   };
 
   //  Schicht beenden 
   const handleEnde = async () => {
     // Erst alle aktuellen Werte (elapsed, pause, IST) final in die DB schreiben,
-    // damit die Statistik sp�ter exakte Schichtdaten bekommt.
+    // damit die Statistik später exakte Schichtdaten bekommt.
     await dbSync.syncSession();
-    // Dann running=0 setzen (DELETE) � Zeile bleibt als Historien-Protokoll erhalten.
+    // Dann running=0 setzen (DELETE) – Zeile bleibt als Historien-Protokoll erhalten.
     await dbSync.stopSession();
-    // Kontext beim Pi l�schen (optional)
+    // Kontext beim Pi löschen (optional)
     if (PI_SERVER_URL) {
       fetch(`${PI_SERVER_URL}/context`, {
         method: 'POST',
@@ -521,7 +521,7 @@ const ProtocolScreen = () => {
           formatTime={formatTime}
         />
 
-        {!timer.selectedIssue && currentView !== 'st�rung' && (
+        {!timer.selectedIssue && currentView !== 'störung' && (
           <LogsSection
             localLogs={localLogs}
             viewMode={viewMode} setViewMode={setViewMode}
@@ -547,4 +547,3 @@ const ProtocolScreen = () => {
 };
 
 export default ProtocolScreen;
-
