@@ -21,6 +21,21 @@ app.use((req, res, next) => {
 // API Routes
 app.use('/api', apiRoutes);
 
+// ── Pi-Kontext: Linie/Schicht vom Tablet empfangen ───────────────────────────
+// Das Tablet ruft POST /context auf, wenn der Benutzer eine Linie/Schicht bestätigt.
+// Der Sensor-Simulator (und später der echte Pi-Sensor) liest GET /context aus.
+let piContext = { linie: null, schicht: null };
+
+app.post('/context', (req, res) => {
+  piContext = { linie: req.body.linie || null, schicht: req.body.schicht || null };
+  console.log(`[Kontext] Linie: "${piContext.linie}" | Schicht: "${piContext.schicht}"`);
+  res.json({ success: true, context: piContext });
+});
+
+app.get('/context', (req, res) => {
+  res.json(piContext);
+});
+
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({

@@ -14,6 +14,12 @@ import { useSollData } from './protocol/hooks/useSollData';
 import { useLocalLogs } from './protocol/hooks/useLocalLogs';
 import { useDbSync } from './protocol/hooks/useDbSync';
 
+// Adresse des Raspberry‑Pi/Node‑Servers, der Kontext (Linie/Schicht)
+// vom Tablet empfängt und dann den Sensor‑Increment weiterleitet.
+// Leer lassen deaktiviert die Benachrichtigung.
+const PI_SERVER_URL = 'http://192.168.10.127:3001'; // dev: gleicher Server wie FA-Suche
+
+
 //  Constants 
 const LINE_OPTIONS = [
   { label: 'Linie 1', value: 'Linie 1' },
@@ -269,6 +275,14 @@ const ProtocolScreen = () => {
         if (assigned && leader && shift) {
           updateShiftData({ selectedLine: assigned, selectedLeader: leader, selectedShift: shift });
           setSelectionConfirmed(true);
+          // Pi-Server beim App-Start sofort über aktuelle Linie/Schicht informieren
+          if (PI_SERVER_URL) {
+            fetch(`${PI_SERVER_URL}/context`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ linie: assigned, schicht: shift })
+            }).catch(() => {});
+          }
         }
       } catch (e) { console.warn('Failed to load persisted assignment', e); }
     })();
@@ -358,6 +372,15 @@ const ProtocolScreen = () => {
       await AsyncStorage.setItem('assigned_line_locked', 'true');
       setLineLocked(true); setSelectionConfirmed(true);
 
+      // inform Pi‑Server über aktualisierte Linie/Schicht
+      if (PI_SERVER_URL) {
+        fetch(`${PI_SERVER_URL}/context`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ linie: localLine, schicht: localShift })
+        }).catch(() => {});
+      }
+
       // 3) DB zuerst laden – DB gewinnt immer über lokalen Cache
       loadLocalLogs(localLine, localShift);
       let dbSessionRestored = false;
@@ -424,6 +447,14 @@ const ProtocolScreen = () => {
     await dbSync.syncSession();
     // Dann running=0 setzen (DELETE) – Zeile bleibt als Historien-Protokoll erhalten.
     await dbSync.stopSession();
+    // Kontext beim Pi löschen (optional)
+    if (PI_SERVER_URL) {
+      fetch(`${PI_SERVER_URL}/context`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linie: null, schicht: null })
+      }).catch(() => {});
+    }
     await timer.resetTimer();
     try { await AsyncStorage.removeItem('assigned_leader'); } catch {}
     try { await AsyncStorage.removeItem('assigned_shift');  } catch {}
