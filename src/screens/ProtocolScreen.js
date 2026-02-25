@@ -1,5 +1,5 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Modal } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ConfirmModal from '../components/ConfirmModal';
 import { useShift } from '../context/ShiftContext';
@@ -8,45 +8,30 @@ import { THEME } from '../styles/globalStyles';
 import { lineButtonConfig } from '../config/lineButtonConfig';
 import { MaterialIcons } from '@expo/vector-icons';
 import FAService from '../services/faService';
+import { formatTime } from '../utils/helper';
 
 import { useProductionTimer } from './protocol/hooks/useProductionTimer';
 import { useSollData } from './protocol/hooks/useSollData';
 import { useLocalLogs } from './protocol/hooks/useLocalLogs';
 import { useDbSync } from './protocol/hooks/useDbSync';
+import SelectionBar   from './protocol/components/SelectionBar';
+import FaSection      from './protocol/components/FaSection';
+import SollIstZeitRow from './protocol/components/SollIstZeitRow';
+import ActionSection  from './protocol/components/ActionSection';
+import LogsSection    from './protocol/components/LogsSection';
 
-// Adresse des Raspberry‑Pi/Node‑Servers, der Kontext (Linie/Schicht)
-// vom Tablet empfängt und dann den Sensor‑Increment weiterleitet.
+// Adresse des Raspberry-Pi/Node-Servers, der Kontext (Linie/Schicht)
+// vom Tablet empf�ngt und dann den Sensor-Increment weiterleitet.
 // Leer lassen deaktiviert die Benachrichtigung.
 const PI_SERVER_URL = 'http://192.168.10.127:3001'; // dev: gleicher Server wie FA-Suche
 
 
 //  Constants 
-const LINE_OPTIONS = [
-  { label: 'Linie 1', value: 'Linie 1' },
-  { label: 'Linie 2', value: 'Linie 2' },
-  { label: 'Linie 3', value: 'Linie 3' },
-  { label: 'Linie 4', value: 'Linie 4' },
-  { label: 'Linie 5', value: 'Linie 5' },
-  { label: 'Linie 6', value: 'Linie 6' },
-];
-const LEADER_OPTIONS = [{ label: 'Melih Iskender', value: 'Melih Iskender' }];
-const SHIFT_OPTIONS  = [
-  { label: 'Frühschicht', value: 'Frühschicht' },
-  { label: 'Spätschicht', value: 'Spätschicht' },
-];
-
 const IST_COLORS = {
   good:    THEME.colors.dark.success,
   warning: THEME.colors.dark.warning,
   bad:     THEME.colors.dark.danger,
   neutral: THEME.colors.dark.foreground,
-};
-
-//  Helper 
-const formatTime = (totalSeconds) => {
-  const s = Math.max(0, Number(totalSeconds) || 0);
-  const two = (n) => n.toString().padStart(2, '0');
-  return `${two(Math.floor(s / 3600))}:${two(Math.floor((s % 3600) / 60))}:${two(s % 60)}`;
 };
 
 // 
@@ -66,7 +51,7 @@ const ProtocolScreen = () => {
 
   //  Confirm dialog 
   const [confirmDialog, setConfirmDialog] = useState({ visible: false, title: '', message: '', onConfirm: null });
-  const showConfirm = ({ title = 'Bestätigen', message = 'Bist du sicher?', onConfirm = null }) =>
+  const showConfirm = ({ title = 'Best�tigen', message = 'Bist du sicher?', onConfirm = null }) =>
     setConfirmDialog({ visible: true, title, message, onConfirm });
   const hideConfirm = () => setConfirmDialog(prev => ({ ...prev, visible: false, onConfirm: null }));
 
@@ -77,11 +62,11 @@ const ProtocolScreen = () => {
   const [isSearching, setIsSearching]           = useState(false);
   const [selectedFA, setSelectedFA]             = useState(null);
   const faInitialized = useRef(false);
-  // Wenn true: selectionConfirmed wurde für die GLEICHE Linie/Schicht neu gesetzt
-  // → useEffect darf den laufenden Timer NICHT anfassen
+  // Wenn true: selectionConfirmed wurde f�r die GLEICHE Linie/Schicht neu gesetzt
+  // ? useEffect darf den laufenden Timer NICHT anfassen
   const skipTimerRestoreRef = useRef(false);
 
-  // Persist FA whenever it changes — skip the very first render (null initial state)
+  // Persist FA whenever it changes � skip the very first render (null initial state)
   // to avoid overwriting the stored value before the restore effect reads it
   useEffect(() => {
     if (!faInitialized.current) {
@@ -117,7 +102,7 @@ const ProtocolScreen = () => {
     setLocalLogsFromServer,
   } = useLocalLogs({ shiftData, selectionConfirmed, localLine, localShift });
 
-  // saveStoerLog mit DB-Sync wrappen – wird an useProductionTimer übergeben
+  // saveStoerLog mit DB-Sync wrappen � wird an useProductionTimer �bergeben
   const saveStoerLogWithSync = async (args) => {
     await saveStoerLog(args);
     saveStoerLogWithSyncRef.current?.(args);
@@ -126,7 +111,7 @@ const ProtocolScreen = () => {
 
   const timer = useProductionTimer({ shiftData, saveStoerLog: saveStoerLogWithSync });
 
-  // useSollData vor useDbSync – damit istValue beim Sync verfügbar ist
+  // useSollData vor useDbSync � damit istValue beim Sync verf�gbar ist
   const {
     sollPerHour, anzahlArbeiter, istValue,
     isImportingSoll, isFetchingSoll,
@@ -135,7 +120,7 @@ const ProtocolScreen = () => {
 
   const dbSync = useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue });
 
-  // Ref mit syncStoerung befüllen sobald dbSync bereit
+  // Ref mit syncStoerung bef�llen sobald dbSync bereit
   useEffect(() => {
     saveStoerLogWithSyncRef.current = dbSync.syncStoerung;
   }, [dbSync.syncStoerung]);
@@ -144,7 +129,7 @@ const ProtocolScreen = () => {
   const applyDbSession = async (session) => {
     if (!session) return;
     await timer.applyRemoteSession(session);
-    // DB gewinnt immer – FA aus Session übernehmen (überschreibt lokalen Stand)
+    // DB gewinnt immer � FA aus Session �bernehmen (�berschreibt lokalen Stand)
     if (session.fa_nr) {
       setSelectedFA({
         FANr: session.fa_nr,
@@ -160,10 +145,10 @@ const ProtocolScreen = () => {
   const _pauseSec = Number(timer.totalPauseSeconds) || 0;
   const sollPerMin = _soll > 0 ? Math.round((_soll / 60) * 100) / 100 : 0;
 
-  // Frühschicht: wenn Produktion zwischen 6:00 und 6:30 gestartet wurde,
-  // rechne SOLL ab 6:00 (nicht ab tatsächlichem Start-Druck)
+  // Fr�hschicht: wenn Produktion zwischen 6:00 und 6:30 gestartet wurde,
+  // rechne SOLL ab 6:00 (nicht ab tats�chlichem Start-Druck)
   const getSollGrossElapsed = () => {
-    if (shiftData.selectedShift !== 'Frühschicht') return timer.elapsed;
+    if (shiftData.selectedShift !== 'Fr�hschicht') return timer.elapsed;
     const startTs = timer.mainTimerStartTime.current;
     if (!startTs) return timer.elapsed;
     const startDate = new Date(startTs);
@@ -171,10 +156,11 @@ const ProtocolScreen = () => {
     snap.setHours(6, 0, 0, 0);
     const diffMin = (startDate - snap) / 60000;
     if (diffMin < 0 || diffMin > 30) return timer.elapsed;
-    // Offset in Sekunden zwischen 6:00 und tatsächlichem Start dazuaddieren
+    // Offset in Sekunden zwischen 6:00 und tats�chlichem Start dazuaddieren
     return timer.elapsed + diffMin * 60;
   };
-  const netSec = Math.max(0, getSollGrossElapsed() - _pauseSec);
+  // SOLL basiert auf Brutto-Zeit (kein _pauseSec-Abzug ? kein R�ckw�rtssprung beim Weiter-Dr�cken)
+  const netSec = getSollGrossElapsed();
   const expectedIst        = _soll > 0 ? (netSec / 3600) * _soll : 0;
   const expectedIstRounded = Math.round(expectedIst);
   const istDiff            = _ist - expectedIstRounded;
@@ -194,7 +180,7 @@ const ProtocolScreen = () => {
   const effectiveShift = selectionConfirmed ? shiftData.selectedShift : localShift;
 
   const statusInfo = timer.stoerRunning || timer.selectedIssue
-    ? { color: THEME.colors.dark.danger,  text: 'Störung'    }
+    ? { color: THEME.colors.dark.danger,  text: 'St�rung'    }
     : timer.pauseRunning
     ? { color: THEME.colors.dark.warning, text: 'Pause'      }
     : timer.running
@@ -211,11 +197,11 @@ const ProtocolScreen = () => {
     timer.restorePauseTotalsForSelection(shiftData.selectedLine, shiftData.selectedShift);
   }, [shiftData.selectedLine, shiftData.selectedShift, localLine, localShift, selectionConfirmed]);
 
-  // ── Wenn Schicht bestätigt ist (oder App neu geöffnet während Schicht läuft):
-  //     lade Session + Störungen aus der DB (Server gewinnt laut Einstellung).
+  // -- Wenn Schicht best�tigt ist (oder App neu ge�ffnet w�hrend Schicht l�uft):
+  //     lade Session + St�rungen aus der DB (Server gewinnt laut Einstellung).
   useEffect(() => {
     if (!selectionConfirmed) return;
-    // Wenn nur der Linienführer geändert wurde (gleiche Linie+Schicht), Timer in Ruhe lassen
+    // Wenn nur der Linienf�hrer ge�ndert wurde (gleiche Linie+Schicht), Timer in Ruhe lassen
     if (skipTimerRestoreRef.current) {
       skipTimerRestoreRef.current = false;
       return;
@@ -230,7 +216,7 @@ const ProtocolScreen = () => {
         if (Array.isArray(stoerungen) && stoerungen.length) {
           const incoming = stoerungen.map(s => ({
             id: s.id || Date.now(),
-            type: 'störung',
+            type: 'st�rung',
             line: s.linie,
             lineNumber: s.linie_nummer || (s.linie?.match(/\d+/)?.[0] || s.linie),
             shift: s.schicht,
@@ -244,7 +230,7 @@ const ProtocolScreen = () => {
             createdAt: s.erstellt_am || new Date().toISOString(),
           }));
 
-          // Nur DB‑Störungen anzeigen (ersetze die aktuell angezeigten Logs)
+          // Nur DB-St�rungen anzeigen (ersetze die aktuell angezeigten Logs)
           setLocalLogsFromServer(incoming);
         }
       } catch (e) {
@@ -275,7 +261,7 @@ const ProtocolScreen = () => {
         if (assigned && leader && shift) {
           updateShiftData({ selectedLine: assigned, selectedLeader: leader, selectedShift: shift });
           setSelectionConfirmed(true);
-          // Pi-Server beim App-Start sofort über aktuelle Linie/Schicht informieren
+          // Pi-Server beim App-Start sofort �ber aktuelle Linie/Schicht informieren
           if (PI_SERVER_URL) {
             fetch(`${PI_SERVER_URL}/context`, {
               method: 'POST',
@@ -296,7 +282,7 @@ const ProtocolScreen = () => {
     try {
       const data = await FAService.searchFA(faSearchText);
       if (data.success) {
-        if (data.results.length === 0) setFaSearchError('FA nicht gefunden oder Status ungültig (erlaubt: 30, 35, 36)');
+        if (data.results.length === 0) setFaSearchError('FA nicht gefunden oder Status ung�ltig (erlaubt: 30, 35, 36)');
         else setFaSearchResults(data.results);
       } else { setFaSearchError(data.error || 'Fehler beim Suchen'); }
     } catch { setFaSearchError('Verbindungsfehler zum Server. Ist das Backend gestartet?'); }
@@ -308,20 +294,20 @@ const ProtocolScreen = () => {
     setSelectedFA(newFA);
     setFaSearchText(''); setFaSearchResults([]); setFaSearchError('');
 
-    // Prüfe ob für diese FA heute auf dieser Linie/Schicht eine Session gespeichert ist.
-    // Falls ja → Brutto-Start, Netto-Zeit, Pausen, IST-Stk wiederherstellen (selbe Produktion).
-    // Falls eine andere FA gespeichert ist → Timer zurücksetzen (neue Produktion).
+    // Pr�fe ob f�r diese FA heute auf dieser Linie/Schicht eine Session gespeichert ist.
+    // Falls ja ? Brutto-Start, Netto-Zeit, Pausen, IST-Stk wiederherstellen (selbe Produktion).
+    // Falls eine andere FA gespeichert ist ? Timer zur�cksetzen (neue Produktion).
     if (!shiftData?.selectedLine || !shiftData?.selectedShift) return;
     try {
       const { session } = await dbSync.loadFromDb();
       if (session && session.fa_nr === fa.FANr) {
-        // Gleiche FA wie in DB → alles wiederherstellen
+        // Gleiche FA wie in DB ? alles wiederherstellen
         await timer.applyRemoteSession(session);
       } else if (session && session.fa_nr && session.fa_nr !== fa.FANr) {
-        // Andere FA war gespeichert → neuer Produktionslauf → Timer zurücksetzen
+        // Andere FA war gespeichert ? neuer Produktionslauf ? Timer zur�cksetzen
         await timer.resetTimer();
       }
-      // Kein session → nichts tun (frischer Start)
+      // Kein session ? nichts tun (frischer Start)
     } catch (e) {
       console.warn('[handleSelectFA] DB-Session-Lookup fehlgeschlagen:', e.message);
     }
@@ -346,17 +332,17 @@ const ProtocolScreen = () => {
       const prevShift = shiftData.selectedShift;
       const sameSelection = (prevLine === localLine && prevShift === localShift);
 
-      // ── Gleiche Linie + Schicht: nur Linienführer aktualisieren, Timer läuft weiter ──
+      // -- Gleiche Linie + Schicht: nur Linienf�hrer aktualisieren, Timer l�uft weiter --
       if (sameSelection) {
         skipTimerRestoreRef.current = true; // useEffect soll Timer NICHT neu laden
         updateShiftData({ selectedLine: localLine, selectedLeader: localLeader, selectedShift: localShift });
         await persistLeader(localLeader);
         await AsyncStorage.setItem('assigned_line_locked', 'true');
         setLineLocked(true); setSelectionConfirmed(true);
-        return; // Timer nicht anfassen – Produktion läuft unverändert weiter
+        return; // Timer nicht anfassen � Produktion l�uft unver�ndert weiter
       }
 
-      // ── Linie oder Schicht hat sich geändert ─────────────────────────────────────────
+      // -- Linie oder Schicht hat sich ge�ndert -----------------------------------------
 
       // 1) Vorherige Schicht speichern (pausiert)
       if (prevLine && prevShift) {
@@ -366,13 +352,13 @@ const ProtocolScreen = () => {
         } catch (e) { console.warn('Failed to save previous shift data', e); }
       }
 
-      // 2) Neue Auswahl übernehmen
+      // 2) Neue Auswahl �bernehmen
       updateShiftData({ selectedLine: localLine, selectedLeader: localLeader, selectedShift: localShift });
       await persistLine(localLine); await persistLeader(localLeader); await persistShift(localShift);
       await AsyncStorage.setItem('assigned_line_locked', 'true');
       setLineLocked(true); setSelectionConfirmed(true);
 
-      // inform Pi‑Server über aktualisierte Linie/Schicht
+      // inform Pi-Server �ber aktualisierte Linie/Schicht
       if (PI_SERVER_URL) {
         fetch(`${PI_SERVER_URL}/context`, {
           method: 'POST',
@@ -381,7 +367,7 @@ const ProtocolScreen = () => {
         }).catch(() => {});
       }
 
-      // 3) DB zuerst laden – DB gewinnt immer über lokalen Cache
+      // 3) DB zuerst laden � DB gewinnt immer �ber lokalen Cache
       loadLocalLogs(localLine, localShift);
       let dbSessionRestored = false;
       try {
@@ -393,7 +379,7 @@ const ProtocolScreen = () => {
         if (Array.isArray(stoerungen) && stoerungen.length) {
           const incoming = stoerungen.map(s => ({
             id: s.id || Date.now(),
-            type: 'störung',
+            type: 'st�rung',
             line: s.linie,
             lineNumber: s.linie_nummer || (s.linie?.match(/\d+/)?.[0] || s.linie),
             shift: s.schicht,
@@ -410,7 +396,7 @@ const ProtocolScreen = () => {
         }
       } catch (e) { console.warn('Fehler beim Laden aus DB:', e); }
 
-      // 4) Fallback: nur wenn DB keine Session hatte → lokalen Cache; beides leer → Reset
+      // 4) Fallback: nur wenn DB keine Session hatte ? lokalen Cache; beides leer ? Reset
       if (!dbSessionRestored) {
         try {
           const loaded = await timer.loadStateForSelection(localLine, localShift);
@@ -429,25 +415,25 @@ const ProtocolScreen = () => {
 
     if (isChangingSelection && hasActiveProduction) {
       showConfirm({
-        title: 'Schichtwechsel bestätigen',
-        message: 'Auf der aktuellen Schicht läuft noch Produktion. Beim Wechsel wird der aktuelle Timer für die alte Schicht gespeichert. Trotzdem wechseln?',
+        title: 'Schichtwechsel best�tigen',
+        message: 'Auf der aktuellen Schicht l�uft noch Produktion. Beim Wechsel wird der aktuelle Timer f�r die alte Schicht gespeichert. Trotzdem wechseln?',
         onConfirm: applySelection,
       });
       return;
     }
 
-    // no confirmation required → apply immediately
+    // no confirmation required ? apply immediately
     await applySelection();
   };
 
   //  Schicht beenden 
   const handleEnde = async () => {
     // Erst alle aktuellen Werte (elapsed, pause, IST) final in die DB schreiben,
-    // damit die Statistik später exakte Schichtdaten bekommt.
+    // damit die Statistik sp�ter exakte Schichtdaten bekommt.
     await dbSync.syncSession();
-    // Dann running=0 setzen (DELETE) – Zeile bleibt als Historien-Protokoll erhalten.
+    // Dann running=0 setzen (DELETE) � Zeile bleibt als Historien-Protokoll erhalten.
     await dbSync.stopSession();
-    // Kontext beim Pi löschen (optional)
+    // Kontext beim Pi l�schen (optional)
     if (PI_SERVER_URL) {
       fetch(`${PI_SERVER_URL}/context`, {
         method: 'POST',
@@ -464,37 +450,11 @@ const ProtocolScreen = () => {
     setSelectedFA(null);
   };
 
-  //  Störung button grid 
-  const renderStörungButtons = (buttons) => (
-    <View style={protocolScreenStyles.modalSelectCard}>
-      <View style={protocolScreenStyles.modalHeaderRow}>
-        <Text style={protocolScreenStyles.modalTitle}>Störung auswählen</Text>
-        <TouchableOpacity onPress={() => setCurrentView('initial')}>
-          <Text style={protocolScreenStyles.modalClose}></Text>
-        </TouchableOpacity>
-      </View>
-      <View style={protocolScreenStyles.gridContainer}>
-        {buttons.map((label, i) => (
-          <TouchableOpacity
-            key={i}
-            style={protocolScreenStyles.disturbanceCard}
-            onPress={() => { timer.handleIssueSelect(label); setCurrentView('initial'); }}
-          >
-            <View style={{ alignItems: 'center' }}>
-              <MaterialIcons name="warning" size={20} color={THEME.colors.dark.foregroundMuted} style={protocolScreenStyles.disturbanceIcon} />
-              <Text style={protocolScreenStyles.actionButtonText} numberOfLines={2} ellipsizeMode="tail">{label}</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
-
   // 
   return (
     <View style={protocolScreenStyles.container}>
 
-      {/*  Header Bar  */}
+      {/* Header Bar */}
       <View style={protocolScreenStyles.headerBar}>
         <View style={protocolScreenStyles.headerLeft}>
           <MaterialIcons name="assessment" size={28} color={THEME.colors.dark.info} />
@@ -509,524 +469,72 @@ const ProtocolScreen = () => {
         </Text>
       </View>
 
-      {/*  Selection Bar  */}
-      <View style={protocolScreenStyles.topSelectionBar}>
-        {!selectionConfirmed ? (
-          <>
-            <View style={protocolScreenStyles.selectionGroup}>
-              {/* Line chip */}
-              <TouchableOpacity
-                style={[protocolScreenStyles.selectionChip, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
-                onPress={() => { if (!lineLocked) setOpenSelectModal('line'); }}
-                activeOpacity={lineLocked ? 1 : 0.7}
-              >
-                <View>
-                  <Text style={protocolScreenStyles.selectionLabelSmall}>Linie</Text>
-                  <Text style={protocolScreenStyles.selectionValueSmall}>{localLine || ''}</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => {
-                    if (lineLocked) {
-                      showConfirm({
-                        title: 'Linie entsperren',
-                        message: 'Linie wirklich entsperren?',
-                        onConfirm: async () => {
-                          setLineLocked(false);
-                          try { await AsyncStorage.removeItem('assigned_line_locked'); } catch {}
-                        },
-                      });
-                    } else {
-                      setLineLocked(true);
-                      AsyncStorage.setItem('assigned_line_locked', 'true');
-                    }
-                  }}
-                  style={{ paddingLeft: 8, paddingRight: 4 }}
-                >
-                  <MaterialIcons name={lineLocked ? 'lock' : 'lock-open'} size={18} color={lineLocked ? THEME.colors.dark.warning : THEME.colors.dark.foregroundMuted} />
-                </TouchableOpacity>
-              </TouchableOpacity>
+      <SelectionBar
+        localLine={localLine} setLocalLine={setLocalLine}
+        localLeader={localLeader} setLocalLeader={setLocalLeader}
+        localShift={localShift} setLocalShift={setLocalShift}
+        selectionConfirmed={selectionConfirmed} setSelectionConfirmed={setSelectionConfirmed}
+        lineLocked={lineLocked} setLineLocked={setLineLocked}
+        openSelectModal={openSelectModal} setOpenSelectModal={setOpenSelectModal}
+        shiftData={shiftData}
+        anzahlArbeiter={anzahlArbeiter}
+        handleConfirmSelection={handleConfirmSelection}
+        showConfirm={showConfirm}
+      />
 
-              <TouchableOpacity style={protocolScreenStyles.selectionChip} onPress={() => setOpenSelectModal('leader')}>
-                <Text style={protocolScreenStyles.selectionLabelSmall}>Linienführer</Text>
-                <Text style={protocolScreenStyles.selectionValueSmall}>{localLeader || ''}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={protocolScreenStyles.selectionChip} onPress={() => setOpenSelectModal('shift')}>
-                <Text style={protocolScreenStyles.selectionLabelSmall}>Schicht</Text>
-                <Text style={protocolScreenStyles.selectionValueSmall}>{localShift || ''}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity style={protocolScreenStyles.confirmSmallButton} onPress={handleConfirmSelection}>
-              <Text style={protocolScreenStyles.confirmSmallButtonText}>Bestätigen</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 12 }}>
-            <View style={protocolScreenStyles.selectionSummarySmall}>
-              <Text style={{ color: THEME.colors.dark.foregroundMuted, fontSize: 11 }}>Linie</Text>
-              <Text style={{ color: THEME.colors.dark.foreground, fontWeight: '700', marginLeft: 8 }}>{shiftData.selectedLine}</Text>
-              {lineLocked && <MaterialIcons name="lock" size={14} color={THEME.colors.dark.warning} style={{ marginLeft: 8 }} />}
-              <Text style={{ color: THEME.colors.dark.foregroundMuted, fontSize: 11, marginLeft: 12 }}>Schicht</Text>
-              <Text style={{ color: THEME.colors.dark.foreground, fontWeight: '700', marginLeft: 8 }}>{shiftData.selectedShift}</Text>
-              <Text style={{ color: THEME.colors.dark.foregroundMuted, fontSize: 11, marginLeft: 12 }}>Führer</Text>
-              <Text style={{ color: THEME.colors.dark.foreground, fontWeight: '700', marginLeft: 8 }}>{shiftData.selectedLeader}</Text>
-              <MaterialIcons name="people" size={13} color={THEME.colors.dark.foregroundMuted} style={{ marginLeft: 12 }} />
-              <Text style={{ color: anzahlArbeiter != null ? THEME.colors.dark.foreground : THEME.colors.dark.foregroundMuted, fontWeight: '700', marginLeft: 4 }}>
-                {anzahlArbeiter != null ? anzahlArbeiter : ''}
-              </Text>
-            </View>
-            <TouchableOpacity onPress={() => setSelectionConfirmed(false)}>
-              <Text style={protocolScreenStyles.editSelectionText}>Ändern</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-
-      {/*  Selection picker modal  */}
-      <Modal visible={openSelectModal !== null} transparent animationType="fade">
-        <View style={protocolScreenStyles.modalOverlay}>
-          <View style={protocolScreenStyles.modalSelectCard}>
-            <View style={protocolScreenStyles.modalHeaderRow}>
-              <Text style={protocolScreenStyles.modalTitle}>
-                {openSelectModal === 'line' ? 'Linie wählen' : openSelectModal === 'leader' ? 'Linienführer wählen' : 'Schicht wählen'}
-              </Text>
-              <TouchableOpacity onPress={() => setOpenSelectModal(null)}>
-                <Text style={protocolScreenStyles.modalClose}></Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView>
-              {(openSelectModal === 'line' ? LINE_OPTIONS : openSelectModal === 'leader' ? LEADER_OPTIONS : SHIFT_OPTIONS).map((opt) => (
-                <TouchableOpacity
-                  key={opt.value}
-                  style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: THEME.colors.dark.border }}
-                  onPress={() => {
-                    if (openSelectModal === 'line')   setLocalLine(opt.value);
-                    if (openSelectModal === 'leader') setLocalLeader(opt.value);
-                    if (openSelectModal === 'shift')  setLocalShift(opt.value);
-                    setOpenSelectModal(null);
-                  }}
-                >
-                  <Text style={{ color: THEME.colors.dark.foreground, fontWeight: '600' }}>{opt.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 }}>
-              <TouchableOpacity onPress={() => setOpenSelectModal(null)} style={[protocolScreenStyles.modalButton, protocolScreenStyles.modalCancel]}>
-                <Text style={protocolScreenStyles.modalCancelText}>Abbrechen</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/*  Main scroll content  */}
       <ScrollView style={protocolScreenStyles.contentContainer} contentContainerStyle={protocolScreenStyles.scrollContent}>
-
         <View style={protocolScreenStyles.dashboardGrid}>
-
-          {/* FA Section */}
-          <View style={protocolScreenStyles.faSectionCard}>
-            <Text style={protocolScreenStyles.sectionTitle}>FERTIGUNGSAUFTRAG</Text>
-            {!selectedFA ? (
-              <>
-                <View style={protocolScreenStyles.faSearchContainer}>
-                  <TextInput
-                    style={protocolScreenStyles.faSearchInput}
-                    placeholder="FA-Nummer eingeben"
-                    placeholderTextColor={THEME.colors.dark.foregroundDim}
-                    value={faSearchText}
-                    onChangeText={setFaSearchText}
-                    autoCapitalize="characters"
-                    onSubmitEditing={handleFASearch}
-                  />
-                  <TouchableOpacity style={protocolScreenStyles.faSearchButton} onPress={handleFASearch} disabled={isSearching}>
-                    <MaterialIcons name="search" size={20} color={THEME.colors.dark.foreground} />
-                  </TouchableOpacity>
-                </View>
-                {!!faSearchError && <Text style={protocolScreenStyles.faSearchError}>{faSearchError}</Text>}
-                {faSearchResults.length > 0 && (
-                  <View style={protocolScreenStyles.faResultsContainer}>
-                    <Text style={protocolScreenStyles.faResultsTitle}>Suchergebnisse ({faSearchResults.length})</Text>
-                    <ScrollView style={protocolScreenStyles.faResultsList} nestedScrollEnabled>
-                      {faSearchResults.map((fa, i) => (
-                        <TouchableOpacity key={i} style={protocolScreenStyles.faResultItem} onPress={() => handleSelectFA(fa)}>
-                          <Text style={protocolScreenStyles.faResultFANr}>{fa.FANr}</Text>
-                          <Text style={protocolScreenStyles.faResultArtikel}>{fa.Artikelbezeichnung}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </>
-            ) : (
-              <View style={protocolScreenStyles.faSelectedContainer}>
-                <View style={protocolScreenStyles.faSelectedContent}>
-                  <Text style={protocolScreenStyles.faSelectedLabel}>FA-Nummer</Text>
-                  <Text style={protocolScreenStyles.faSelectedValue}>{selectedFA.FANr}</Text>
-                  <Text style={[protocolScreenStyles.faSelectedLabel, { marginTop: 8 }]}>Artikel-Nr</Text>
-                  <Text style={protocolScreenStyles.faSelectedValue}>{selectedFA.ArtikelNr}</Text>
-                  <Text style={[protocolScreenStyles.faSelectedLabel, { marginTop: 8 }]}>Bezeichnung</Text>
-                  <Text style={protocolScreenStyles.faSelectedValue}>{selectedFA.Artikelbezeichnung}</Text>
-                </View>
-                <TouchableOpacity
-                  style={protocolScreenStyles.faRemoveButton}
-                  onPress={() =>
-                    showConfirm({
-                      title: 'FA entfernen',
-                      message: 'Fertigungsauftrag wirklich entfernen?',
-                      onConfirm: () => setSelectedFA(null),
-                    })
-                  }
-                >
-                  <MaterialIcons name="close" size={20} color={THEME.colors.dark.danger} />
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          {/* SOLL / IST / Zeitübersicht row */}
-          <View style={protocolScreenStyles.sollIstZeitRow}>
-
-            {/* SOLL + IST column */}
-            <View style={protocolScreenStyles.sollIstColumn}>
-              {/* SOLL Card */}
-              <View style={[protocolScreenStyles.sollIstCard, { borderTopWidth: 3, borderTopColor: THEME.colors.dark.primary }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 4 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                    <MaterialIcons name="track-changes" size={13} color={THEME.colors.dark.primary} />
-                    <Text style={protocolScreenStyles.sollIstLabel}>SOLL</Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', gap: 4 }}>
-                    <TouchableOpacity onPress={handleImportSoll} disabled={isImportingSoll} style={{ padding: 5 }}>
-                      <MaterialIcons name="file-upload" size={16} color={isImportingSoll ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={handleRefreshSoll} disabled={isFetchingSoll} style={{ padding: 5 }}>
-                      <MaterialIcons name="autorenew" size={16} color={isFetchingSoll ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.primary} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 3 }}>
-                  <Text style={protocolScreenStyles.sollIstValue}>{_soll > 0 ? expectedIstRounded : '—'}</Text>
-                  {_soll > 0 && <Text style={{ color: THEME.colors.dark.foregroundMuted, fontSize: 13, marginBottom: 7 }}>Stk</Text>}
-                </View>
-                <Text style={{ fontSize: 11, color: THEME.colors.dark.foregroundDim, marginTop: 2 }}>
-                  {_soll > 0 ? `Vorgabe ${sollPerHour} / Std` : 'Kein SOLL geladen'}
-                </Text>
-              </View>
-
-              {/* IST Card */}
-              <View style={[protocolScreenStyles.sollIstCard, protocolScreenStyles.sollIstCardSpacing, { borderTopWidth: 3, borderTopColor: istStatus !== 'neutral' ? istColor : THEME.colors.dark.border }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 4 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                    <MaterialIcons name="bar-chart" size={13} color={istStatus !== 'neutral' ? istColor : THEME.colors.dark.foregroundMuted} />
-                    <Text style={[protocolScreenStyles.sollIstLabel, istStatus !== 'neutral' && { color: istColor }]}>IST</Text>
-                  </View>
-                  {istStatus !== 'neutral' && (
-                    <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: istColor + '25' }}>
-                      <Text style={{ fontSize: 10, fontWeight: '700', color: istColor, textTransform: 'uppercase', letterSpacing: 0.6 }}>
-                        {istStatus === 'good' ? 'Im Soll' : istStatus === 'warning' ? 'Leicht zurück' : 'Zu langsam'}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 3 }}>
-                  <Text style={[protocolScreenStyles.sollIstValue, { color: istColor }]}>{_ist}</Text>
-                  <Text style={{ color: istColor + 'AA', fontSize: 13, marginBottom: 7 }}>Stk</Text>
-                </View>
-                {_soll > 0 ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
-                    <MaterialIcons
-                      name={istDiff >= 0 ? 'arrow-upward' : 'arrow-downward'}
-                      size={13}
-                      color={istDiff >= 0 ? THEME.colors.dark.success : THEME.colors.dark.danger}
-                    />
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: istDiff >= 0 ? THEME.colors.dark.success : THEME.colors.dark.danger }}>
-                      {istDiff >= 0 ? '+' : ''}{istDiff} Stk
-                    </Text>
-                  </View>
-                ) : (
-                  <Text style={{ fontSize: 11, color: THEME.colors.dark.foregroundDim, marginTop: 2 }}>Kein SOLL geladen</Text>
-                )}
-              </View>
-            </View>
-
-            {/* Zeitübersicht column */}
-            <View style={protocolScreenStyles.zeitColumn}>
-              <View style={protocolScreenStyles.sollIstCard}>
-                <Text style={protocolScreenStyles.sectionTitle}>ZEITÜBERSICHT</Text>
-
-                <View style={protocolScreenStyles.zeitStartRow}>
-                  <View style={protocolScreenStyles.zeitStartItem}>
-                    <View style={protocolScreenStyles.zeitInnerBox}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <MaterialIcons name="access-time" size={16} color={THEME.colors.dark.info} style={{ marginRight: 6 }} />
-                        <Text style={protocolScreenStyles.zeitPairLabel}>IST START</Text>
-                      </View>
-                      <Text style={protocolScreenStyles.zeitPairValue}>
-                        {timer.mainTimerStartTime.current
-                          ? new Date(timer.mainTimerStartTime.current).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
-                          : '--:--'}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={protocolScreenStyles.zeitStartItem}>
-                    <View style={protocolScreenStyles.zeitInnerBox}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <MaterialIcons name="access-time" size={16} color={THEME.colors.dark.success} style={{ marginRight: 6 }} />
-                        <Text style={protocolScreenStyles.zeitPairLabel}>SOLL START</Text>
-                      </View>
-                      <Text style={protocolScreenStyles.zeitPairValue}>--:--</Text>
-                    </View>
-                  </View>
-                </View>
-
-                <View style={protocolScreenStyles.zeitPairRow}>
-                  <View style={protocolScreenStyles.zeitPairItem}>
-                    <View style={protocolScreenStyles.zeitInnerBox}>
-                      <Text style={protocolScreenStyles.zeitPairLabel}>BRUTTO</Text>
-                      <Text style={protocolScreenStyles.zeitPairValue}>{formatTime(timer.elapsed)}</Text>
-                    </View>
-                  </View>
-                  <View style={protocolScreenStyles.zeitPairItem}>
-                    <View style={protocolScreenStyles.zeitInnerBox}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <MaterialIcons name="show-chart" size={16} color={THEME.colors.dark.success} style={{ marginRight: 6 }} />
-                        <Text style={[protocolScreenStyles.zeitPairLabel, { color: THEME.colors.dark.success }]}>NETTO</Text>
-                      </View>
-                      <Text style={[protocolScreenStyles.zeitPairValue, { color: THEME.colors.dark.success }]}>
-                        {selectedFA ? formatTime(Math.max(0, timer.elapsed - _pauseSec - stoerTotalSeconds)) : '--:--'}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                <View style={protocolScreenStyles.zeitPairRow}>
-                  <View style={protocolScreenStyles.zeitPairItem}>
-                    <View style={protocolScreenStyles.zeitInnerBox}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <MaterialIcons name="warning" size={16} color={THEME.colors.dark.danger} style={{ marginRight: 6 }} />
-                        <Text style={[protocolScreenStyles.zeitPairLabel, { color: THEME.colors.dark.danger }]}>STÖRUNG KUM.</Text>
-                      </View>
-                      <Text style={[protocolScreenStyles.zeitPairValue, { color: THEME.colors.dark.danger }]}>
-                        {Math.floor(stoerTotalSeconds / 60)} Min
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={protocolScreenStyles.zeitPairItem}>
-                    <View style={protocolScreenStyles.zeitInnerBox}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <MaterialIcons name="free-breakfast" size={16} color={THEME.colors.dark.warning} style={{ marginRight: 6 }} />
-                        <Text style={[protocolScreenStyles.zeitPairLabel, { color: THEME.colors.dark.warning }]}>PAUSE KUM.</Text>
-                      </View>
-                      <Text style={[protocolScreenStyles.zeitPairValue, { color: THEME.colors.dark.warning }]}>
-                        {Math.floor(_pauseSec / 60)} Min
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            </View>
-          </View>
+          <FaSection
+            faSearchText={faSearchText} setFaSearchText={setFaSearchText}
+            faSearchError={faSearchError}
+            faSearchResults={faSearchResults}
+            isSearching={isSearching}
+            selectedFA={selectedFA}
+            handleFASearch={handleFASearch}
+            handleSelectFA={handleSelectFA}
+            onRemoveFA={() => setSelectedFA(null)}
+            showConfirm={showConfirm}
+          />
+          <SollIstZeitRow
+            timer={timer}
+            selectedFA={selectedFA}
+            sollPerHour={sollPerHour}
+            _soll={_soll} _ist={_ist} _pauseSec={_pauseSec}
+            expectedIstRounded={expectedIstRounded}
+            istDiff={istDiff} istStatus={istStatus} istColor={istColor}
+            stoerTotalSeconds={stoerTotalSeconds}
+            isImportingSoll={isImportingSoll} isFetchingSoll={isFetchingSoll}
+            handleImportSoll={handleImportSoll} handleRefreshSoll={handleRefreshSoll}
+            formatTime={formatTime}
+          />
         </View>
 
-        {/* Störung active timer + note */}
-        {timer.stoerRunning && (
-          <View style={{ padding: 16 }}>
-            <Text style={protocolScreenStyles.stoerTimerText}>Stör-Timer: {formatTime(timer.stoerElapsed)}</Text>
-          </View>
+        <ActionSection
+          currentView={currentView} setCurrentView={setCurrentView}
+          timer={timer}
+          selectedFA={selectedFA}
+          showConfirm={showConfirm}
+          setFaSearchError={setFaSearchError}
+          effectiveLine={effectiveLine}
+          lineButtonConfig={lineButtonConfig}
+          onEnde={handleEnde}
+          formatTime={formatTime}
+        />
+
+        {!timer.selectedIssue && currentView !== 'st�rung' && (
+          <LogsSection
+            localLogs={localLogs}
+            viewMode={viewMode} setViewMode={setViewMode}
+            clearAllLocalLogs={clearAllLocalLogs}
+            setLocalLogsFromServer={setLocalLogsFromServer}
+            dbSync={dbSync}
+            computeIssueSummary={computeIssueSummary}
+            showConfirm={showConfirm}
+            formatTime={formatTime}
+          />
         )}
-        {timer.selectedIssue && (
-          <View style={{ padding: 16 }}>
-            <Text style={protocolScreenStyles.selectedIssueText}>Aktuelle Störung: {timer.selectedIssue}</Text>
-            {timer.selectedIssue === 'Sonstiges' && (
-              <TextInput
-                style={protocolScreenStyles.sonstigesInput}
-                placeholder="Beschreibe die Störung..."
-                placeholderTextColor={THEME.colors.dark.foregroundDim}
-                value={timer.sonstigesText}
-                onChangeText={timer.setSonstigesText}
-                multiline
-              />
-            )}
-          </View>
-        )}
-
-        {/*  Action Buttons  */}
-        {currentView === 'initial' && (
-          <View style={protocolScreenStyles.actionsSection}>
-            {timer.showStartOnly ? (
-              <View style={protocolScreenStyles.buttonsRow}>
-                <TouchableOpacity
-                  style={[protocolScreenStyles.actionButton, protocolScreenStyles.startButton, !selectedFA && protocolScreenStyles.actionButtonDisabled]}
-                  onPress={() => showConfirm({ title: 'Weiter', message: 'Produktion fortsetzen?', onConfirm: () => timer.handleStart(selectedFA, setFaSearchError, setCurrentView) })}
-                  disabled={!selectedFA}
-                >
-                  <MaterialIcons name="play-arrow" size={20} color={selectedFA ? THEME.colors.dark.foreground : THEME.colors.dark.foregroundMuted} />
-                  <Text style={[protocolScreenStyles.actionButtonText, !selectedFA && protocolScreenStyles.actionButtonTextDisabled]}>Weiter</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[protocolScreenStyles.actionButton, protocolScreenStyles.modalCancel]} onPress={() => timer.handleCancelStoer(setCurrentView)}>
-                  <Text style={protocolScreenStyles.modalCancelText}>Abbrechen</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={protocolScreenStyles.buttonsRow}>
-                <TouchableOpacity
-                  style={[protocolScreenStyles.actionButton, protocolScreenStyles.startButton, timer.activeButton === 'start' && protocolScreenStyles.actionButtonActive, !selectedFA && protocolScreenStyles.actionButtonDisabled]}
-                  onPress={() => showConfirm({
-                    title: timer.pauseRunning ? 'Weiter' : 'Produktion starten',
-                    message: timer.pauseRunning ? 'Produktion fortsetzen?' : 'Produktion jetzt starten?',
-                    onConfirm: () => timer.handleStart(selectedFA, setFaSearchError, setCurrentView)
-                  })}
-                  disabled={!selectedFA || timer.activeButton === 'start'}
-                >
-                  <MaterialIcons name="play-arrow" size={20} color={selectedFA ? THEME.colors.dark.foreground : THEME.colors.dark.foregroundMuted} />
-                  <Text style={[protocolScreenStyles.actionButtonText, !selectedFA && protocolScreenStyles.actionButtonTextDisabled]}>
-                    {timer.pauseRunning ? 'Weiter' : 'Produktion starten'}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[protocolScreenStyles.actionButton, protocolScreenStyles.stoerungButton, timer.activeButton === 'störung' && protocolScreenStyles.actionButtonActive]}
-                  onPress={() => timer.handleStörungClick(setCurrentView)}
-                >
-                  <MaterialIcons name="warning" size={20} color={THEME.colors.dark.foreground} />
-                  <Text style={protocolScreenStyles.actionButtonText}>Störung melden</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[protocolScreenStyles.actionButton, protocolScreenStyles.pauseButton, timer.activeButton === 'pause' && protocolScreenStyles.actionButtonActive, !selectedFA && protocolScreenStyles.actionButtonDisabled]}
-                  onPress={() => timer.handlePause(selectedFA, setFaSearchError)}
-                  disabled={!selectedFA}
-                >
-                  <MaterialIcons name="pause" size={20} color={selectedFA ? THEME.colors.dark.foreground : THEME.colors.dark.foregroundMuted} />
-                  <Text style={[protocolScreenStyles.actionButtonText, !selectedFA && protocolScreenStyles.actionButtonTextDisabled]}>Pause setzen</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[protocolScreenStyles.actionButton, protocolScreenStyles.endeButton]}
-                  onPress={() => showConfirm({ title: 'Schicht beenden', message: 'Bist du sicher, dass du die Schicht beenden möchtest?', onConfirm: handleEnde })}
-                >
-                  <MaterialIcons name="stop" size={20} color={THEME.colors.dark.foreground} />
-                  <Text style={protocolScreenStyles.actionButtonText}>Schicht beenden</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Störung selector */}
-        {currentView === 'störung' && lineButtonConfig[effectiveLine]?.störung && (
-          <View style={protocolScreenStyles.stoerungModal}>
-            <Text style={protocolScreenStyles.sectionTitle}>STÖRUNG AUSWÄHLEN</Text>
-            {renderStörungButtons(lineButtonConfig[effectiveLine].störung)}
-          </View>
-        )}
-
-        {/* Logs table */}
-        {!timer.selectedIssue && currentView !== 'störung' && (
-          <View style={protocolScreenStyles.logsSection}>
-            <View style={protocolScreenStyles.tableTitleRow}>
-              <Text style={protocolScreenStyles.sectionTitle}>STÖRUNGSPROTOKOLLE (HEUTE)</Text>
-              <TouchableOpacity onPress={() =>
-                showConfirm({
-                  title: 'Protokoll leeren',
-                  message: 'Einträge werden nur lokal gelöscht. Die Daten bleiben in der Datenbank und werden beim nächsten Laden wiederhergestellt. Trotzdem leeren?',
-                  onConfirm: async () => {
-                    await clearAllLocalLogs();
-                    // DB-Einträge sofort neu laden
-                    try {
-                      const { stoerungen } = await dbSync.loadFromDb();
-                      if (Array.isArray(stoerungen) && stoerungen.length) {
-                        setLocalLogsFromServer(stoerungen.map(s => ({
-                          id: s.id || Date.now(),
-                          type: 'störung',
-                          line: s.linie,
-                          lineNumber: s.linie_nummer || (s.linie?.match(/\d+/)?.[0] || s.linie),
-                          shift: s.schicht,
-                          shift_type: s.schicht,
-                          leader: s.linienfuehrer || null,
-                          issue: s.stoerung_typ,
-                          notes: s.notiz || null,
-                          startTime: new Date(s.start_time).toISOString(),
-                          endTime: new Date(s.end_time).toISOString(),
-                          durationSeconds: Number(s.dauer_sekunden || 0),
-                          createdAt: s.erstellt_am || new Date().toISOString(),
-                        })));
-                      }
-                    } catch (e) { console.warn('DB reload after clear failed', e); }
-                  },
-                })
-              }>
-                <MaterialIcons name="delete-outline" size={24} color={THEME.colors.dark.danger} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={protocolScreenStyles.tabRow}>
-              {['logs', 'summary'].map(mode => (
-                <TouchableOpacity key={mode} onPress={() => setViewMode(mode)} style={[protocolScreenStyles.tabButton, viewMode === mode && protocolScreenStyles.tabActive]}>
-                  <Text style={[protocolScreenStyles.tabText, viewMode === mode && protocolScreenStyles.tabTextActive]}>
-                    {mode === 'logs' ? 'Protokolle' : `Übersicht (${localLogs.length})`}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={protocolScreenStyles.tableContainer}>
-              {viewMode === 'logs' ? (
-                <>
-                  <View style={protocolScreenStyles.tableHeader}>
-                    <View style={{ width: 8 }} />
-                    <Text style={[protocolScreenStyles.tableHeaderCell, { flex: 2 }]}>STÖRUNG</Text>
-                    <Text style={protocolScreenStyles.tableHeaderCell}>START</Text>
-                    <Text style={protocolScreenStyles.tableHeaderCell}>ENDE</Text>
-                    <Text style={protocolScreenStyles.tableHeaderCell}>DAUER</Text>
-                  </View>
-                  {localLogs.length === 0 ? (
-                    <Text style={protocolScreenStyles.tableEmpty}>Keine Einträge für heute</Text>
-                  ) : (
-                    <ScrollView style={protocolScreenStyles.tableScroll} nestedScrollEnabled>
-                      {localLogs.map((log) => {
-                        const dur = log.durationSeconds;
-                        const col = dur >= 60 ? THEME.colors.dark.danger : dur >= 10 ? THEME.colors.dark.warning : THEME.colors.dark.netto;
-                        return (
-                          <View key={log.id} style={[protocolScreenStyles.tableRow, { flexDirection: 'row', alignItems: 'center' }]}>
-                            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: col, marginRight: 12 }} />
-                            <View style={{ flex: 2 }}>
-                              <Text style={protocolScreenStyles.tableCell}>{log.issue}</Text>
-                              {log.notes && <Text style={protocolScreenStyles.tableNote}>{log.notes}</Text>}
-                            </View>
-                            <Text style={protocolScreenStyles.tableCell}>{new Date(log.startTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</Text>
-                            <Text style={protocolScreenStyles.tableCell}>{new Date(log.endTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</Text>
-                            <Text style={[protocolScreenStyles.tableCell, { color: col, fontWeight: '600' }]}>{formatTime(dur)}</Text>
-                          </View>
-                        );
-                      })}
-                    </ScrollView>
-                  )}
-                </>
-              ) : (
-                computeIssueSummary().length === 0 ? (
-                  <Text style={protocolScreenStyles.tableEmpty}>Keine definierten Störungen</Text>
-                ) : (
-                  <View style={protocolScreenStyles.summaryGrid}>
-                    {computeIssueSummary().map(item => (
-                      <View key={item.label} style={protocolScreenStyles.summaryCard}>
-                        <Text style={protocolScreenStyles.summaryCount}>{item.count}</Text>
-                        <Text style={protocolScreenStyles.summaryLabel}>{item.label}</Text>
-                        <Text style={protocolScreenStyles.summaryTime}>{formatTime(item.totalSeconds)}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )
-              )}
-            </View>
-          </View>
-        )}
-
       </ScrollView>
 
-      {/* Confirm Modal */}
       <ConfirmModal
         visible={confirmDialog.visible}
         title={confirmDialog.title}
@@ -1039,3 +547,4 @@ const ProtocolScreen = () => {
 };
 
 export default ProtocolScreen;
+

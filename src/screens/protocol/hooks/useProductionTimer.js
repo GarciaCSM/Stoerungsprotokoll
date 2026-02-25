@@ -315,7 +315,7 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
       setPauseStart(Date.now());
       setPauseRunning(true);
       setActiveButton('pause');
-      setRunning(false);
+      // Brutto-Timer läuft weiter → SOLL-Zähler springt nicht zurück
     }
   };
 
