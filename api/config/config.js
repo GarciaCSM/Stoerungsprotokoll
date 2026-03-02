@@ -1,6 +1,7 @@
 // API Configuration
 const API_CONFIG = {
-  PORT: process.env.PORT || 3001,
+  // allow override with environment variable, fallback to a high non-privileged port
+  PORT: process.env.PORT || 5000,
   HOST: '0.0.0.0',
   ODBC_CONNECTION_STRING: process.env.ODBC_CONNECTION_STRING,
 };

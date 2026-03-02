@@ -2,7 +2,11 @@
   "expo": {
     "name": "Störungsprotokoll",
     "slug": "stoerungsprotokoll",
-    "platforms": ["ios", "android", "web"],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "version": "1.0.0",
     "orientation": "landscape",
     "splash": {
@@ -12,7 +16,9 @@
     "updates": {
       "fallbackToCacheTimeout": 0
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.stoerungsprotokoll.app"
@@ -21,6 +27,11 @@
       "package": "com.stoerungsprotokoll.app",
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF"
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "7d22cc24-504d-4eef-9d69-29bd649e022b"
       }
     }
   }

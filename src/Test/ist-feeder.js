@@ -1,7 +1,7 @@
 /*
   Test feeder script (run with Node)
   - Lives in: src/Test/ist-feeder.js
-  - Usage: node src/Test/ist-feeder.js [--host=http://192.168.10.127:3001]
+  - Usage: node src/Test/ist-feeder.js [--host=http://192.168.10.127:5000]
   - Press "a" (lower- or uppercase) in the console to increment IST by 1 (sends to server)
   - Press "r" to read current IST from server
   - Press "q" or Ctrl+C to quit
@@ -11,7 +11,8 @@ const http = require('http');
 const url = require('url');
 
 const argvHost = process.argv.find(a => a.startsWith('--host='));
-const HOST = argvHost ? argvHost.split('=')[1] : 'http://localhost:3001';
+const DEFAULT_PORT = process.env.PORT || 5000;
+const HOST = argvHost ? argvHost.split('=')[1] : `http://localhost:${DEFAULT_PORT}`;
 const API_BASE = `${HOST}/api`;
 const POST_PATH = '/test/ist';
 const GET_PATH = '/test/ist';

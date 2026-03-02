@@ -17,7 +17,9 @@ const http  = require('http');
 const https = require('https');
 const url   = require('url');
 
-const PI_URL  = 'http://localhost:3001';  // dev: gleicher server.js wie FA-Suche (Port 3001)
+// use environment variable or default to the current API port (5000 after config change)
+const PI_PORT = process.env.PORT || 5000;
+const PI_URL  = `http://localhost:${PI_PORT}`;  // dev: gleicher server.js wie FA-Suche
 const IST_API = 'https://cosmetic-service.com/php-api/produktion/ist.php';
 
 function doRequest(method, rawUrl, body, cb) {
@@ -74,7 +76,12 @@ console.log('║  a → Sensor-Hit (+1)  |  c → Kontext  |  q → quit ║');
 console.log('╚════════════════════════════════════════════╝\n');
 
 process.stdin.setEncoding('utf8');
-if (process.stdin.isTTY) process.stdin.setRawMode(true);
+process.stdin.resume(); // Prozess am Leben halten auch wenn kein TTY
+if (process.stdin.isTTY) {
+  process.stdin.setRawMode(true); // Einzelne Tasten ohne Enter
+} else {
+  console.log('  (Kein TTY erkannt – Enter nach jeder Taste drücken)\n');
+}
 
 process.stdin.on('data', (key) => {
   const k = key.toString();

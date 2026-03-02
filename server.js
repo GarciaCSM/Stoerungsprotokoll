@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const os = require('os');
 require('dotenv').config();
 
 const { API_CONFIG, CORS_OPTIONS } = require('./api/config/config');
@@ -73,8 +74,27 @@ const server = app.listen(API_CONFIG.PORT, API_CONFIG.HOST, () => {
   console.log('='.repeat(60));
   console.log(`  Status:           Running`);
   console.log(`  Listen on:        ${API_CONFIG.HOST}:${API_CONFIG.PORT}`);
+  console.log(
+    `  (env PORT=${process.env.PORT || '<unset>'}  default=5000)`
+  );
   console.log(`  Local URL:        http://localhost:${API_CONFIG.PORT}`);
-  console.log(`  Network URL:      http://192.168.10.127:${API_CONFIG.PORT}`);
+  // build a list of non-internal IPv4 addresses to show as network URLs
+  const nets = os.networkInterfaces();
+  const addresses = [];
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      if (net.family === 'IPv4' && !net.internal) {
+        addresses.push(net.address);
+      }
+    }
+  }
+  if (addresses.length) {
+    addresses.forEach(addr => {
+      console.log(`  Network URL:      http://${addr}:${API_CONFIG.PORT}`);
+    });
+  } else {
+    console.log('  Network URL:      <none found>');
+  }
   console.log(`  ODBC DSN:         ${API_CONFIG.ODBC_CONNECTION_STRING.split(';')[0]}`);
   console.log(`  Time:             ${new Date().toLocaleString('de-DE')}`);
   console.log('='.repeat(60));

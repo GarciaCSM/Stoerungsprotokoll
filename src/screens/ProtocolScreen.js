@@ -9,6 +9,7 @@ import { lineButtonConfig } from '../config/lineButtonConfig';
 import { MaterialIcons } from '@expo/vector-icons';
 import FAService from '../services/faService';
 import { formatTime } from '../utils/helper';
+import { API_BASE_URL } from '../config/apiConfig';
 
 import { useProductionTimer } from './protocol/hooks/useProductionTimer';
 import { useSollData } from './protocol/hooks/useSollData';
@@ -20,10 +21,9 @@ import SollIstZeitRow from './protocol/components/SollIstZeitRow';
 import ActionSection  from './protocol/components/ActionSection';
 import LogsSection    from './protocol/components/LogsSection';
 
-// Adresse des Raspberry‑Pi/Node‑Servers, der Kontext (Linie/Schicht)
-// vom Tablet empfängt und dann den Sensor‑Increment weiterleitet.
-// Leer lassen deaktiviert die Benachrichtigung.
-const PI_SERVER_URL = 'http://192.168.10.127:3001'; // dev: gleicher Server wie FA-Suche
+// PI_SERVER_URL automatisch aus API_BASE_URL ableiten (entfernt /api Suffix)
+// → USB-Dev: localhost:3001, WLAN/Tablet: 192.168.10.127:3001
+const PI_SERVER_URL = API_BASE_URL.replace(/\/api$/, '');
 
 
 //  Constants 

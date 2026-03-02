@@ -2,15 +2,17 @@
   "name": "stoerungsprotokoll",
   "version": "0.1.0",
   "private": true,
-  "main": "node_modules/expo/AppEntry.js",
   "scripts": {
-    "start": "expo start",
+    "start": "expo start --dev-client",
+    "start:usb": "C:\\platform-tools\\adb.exe reverse tcp:19000 tcp:19000 && C:\\platform-tools\\adb.exe reverse tcp:19001 tcp:19001 && C:\\platform-tools\\adb.exe reverse tcp:5000 tcp:5000 && expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "preserver": "node scripts/kill-port.js",
+    "preserver:dev": "node scripts/kill-port.js",
     "server": "node server.js",
     "server:dev": "nodemon server.js",
-    "test:ist": "node src/Test/ist-feeder.js --host=http://192.168.10.127:3001",
+    "test:ist": "node src/Test/ist-feeder.js --host=http://192.168.10.127:5000",
     "test:ist-db": "node src/Test/ist-feeder-db.js",
     "test:pi-server": "node src/Test/pi-server.js",
     "test:sensor": "node src/Test/sensor-simulator.js"
@@ -32,7 +34,8 @@
     "react-native-web": "~0.18.10",
     "expo-document-picker": "~11.0.0",
     "expo-file-system": "~15.2.2",
-    "xlsx": "0.18.5"
+    "xlsx": "0.18.5",
+    "expo-dev-client": "~2.2.1"
   },
   "devDependencies": {
     "@babel/core": "^7.18.6",

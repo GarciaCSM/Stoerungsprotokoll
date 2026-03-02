@@ -1,6 +1,12 @@
 // API Configuration
-// Using local backend server on network IP (accessible from phone/emulator)
-export const API_BASE_URL = 'http://192.168.10.127:3001/api';
+// USB-Entwicklung (adb reverse): USE_LOCALHOST = true → localhost
+// WLAN / Tablet-Produktion:      USE_LOCALHOST = false → LAN-IP
+const USE_LOCALHOST = false; // ← true nur für USB-Entwicklung am PC
+
+export const API_BASE_URL =
+  __DEV__ && USE_LOCALHOST
+    ? 'http://localhost:3001/api'
+    : 'http://192.168.10.127:3001/api';
 
 // IONOS PHP-API base (für IST-Wert via DB)
 export const IONOS_API_BASE = 'https://cosmetic-service.com/php-api/produktion';
