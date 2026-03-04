@@ -17,9 +17,10 @@ const http  = require('http');
 const https = require('https');
 const url   = require('url');
 
-// use environment variable or default to the current API port (5000 after config change)
-const PI_PORT = process.env.PORT || 5000;
-const PI_URL  = `http://localhost:${PI_PORT}`;  // dev: gleicher server.js wie FA-Suche
+// Pi-Server Port (pi-server.js läuft auf 3000 – getrennt vom Node-Backend auf 3001)
+// Im Dev: npm run test:pi-server startet pi-server.js auf localhost:3000
+const PI_PORT = process.env.PI_PORT || 3000;
+const PI_URL  = process.env.PI_URL  || `http://localhost:${PI_PORT}`;
 const IST_API = 'https://cosmetic-service.com/php-api/produktion/ist.php';
 
 function doRequest(method, rawUrl, body, cb) {
@@ -61,10 +62,14 @@ function sendIncrement(ctx) {
     console.log('  ⚠  Kein Kontext gesetzt – erst im Tablet eine Linie/Schicht bestätigen!');
     return;
   }
+  if (!ctx.fa_nr) {
+    console.log('  ⚠  Kein FA ausgewählt – bitte zuerst im Tablet eine FA-Nummer auswählen!');
+    return;
+  }
   const datum = new Date().toISOString().slice(0, 10);
   doRequest('POST', IST_API, { linie: ctx.linie, schicht: ctx.schicht, datum, increment: 1 }, (err, json) => {
     if (err) { console.error('  ✗ Fehler:', err.message); return; }
-    if (json?.success) console.log(`  ✓ IST jetzt: ${json.ist}  (${ctx.linie} / ${ctx.schicht})`);
+    if (json?.success) console.log(`  ✓ IST jetzt: ${json.ist}  (${ctx.linie} / ${ctx.schicht} / FA ${ctx.fa_nr})`);
     else console.log('  ✗ Antwort:', JSON.stringify(json));
   });
 }
@@ -91,6 +96,13 @@ process.stdin.on('data', (key) => {
     getContext(ctx => sendIncrement(ctx));
   }
   if (k === 'c') {
-    getContext(ctx => console.log('  Kontext:', ctx ? JSON.stringify(ctx) : 'Pi-Server nicht erreichbar'));
+    getContext(ctx => {
+      if (!ctx) { console.log('  Kontext: Pi-Server nicht erreichbar'); return; }
+      console.log('  Kontext:');
+      console.log(`    Linie   : ${ctx.linie   || '(nicht gesetzt)'}`);
+      console.log(`    Schicht : ${ctx.schicht || '(nicht gesetzt)'}`);
+      console.log(`    Bereich : ${ctx.bereich || '(nicht gesetzt)'}`);
+      console.log(`    FA-Nr   : ${ctx.fa_nr   || '(nicht gesetzt)'}`);
+    });
   }
 });

@@ -14,12 +14,20 @@ export default function FaSection({
   handleSelectFA,
   onRemoveFA,
   showConfirm,
+  selectionReady,
 }) {
   return (
     <View style={s.faSectionCard}>
       <Text style={s.sectionTitle}>FERTIGUNGSAUFTRAG</Text>
 
-      {!selectedFA ? (
+      {!selectionReady ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, gap: 10 }}>
+          <MaterialIcons name="lock" size={18} color={THEME.colors.dark.foregroundMuted} />
+          <Text style={{ color: THEME.colors.dark.foregroundMuted, fontSize: 13, flexShrink: 1 }}>
+            Bitte zuerst Linie, Schicht, Linienführer und Bereich auswählen und bestätigen.
+          </Text>
+        </View>
+      ) : !selectedFA ? (
         <>
           <View style={s.faSearchContainer}>
             <TextInput

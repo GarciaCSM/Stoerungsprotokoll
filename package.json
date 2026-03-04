@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "start": "expo start --dev-client",
-    "start:usb": "C:\\platform-tools\\adb.exe reverse tcp:19000 tcp:19000 && C:\\platform-tools\\adb.exe reverse tcp:19001 tcp:19001 && C:\\platform-tools\\adb.exe reverse tcp:5000 tcp:5000 && expo start",
+    "start:usb": "C:\\platform-tools\\adb.exe reverse tcp:19000 tcp:19000 && C:\\platform-tools\\adb.exe reverse tcp:19001 tcp:19001 && C:\\platform-tools\\adb.exe reverse tcp:3001 tcp:3001 && C:\\platform-tools\\adb.exe reverse tcp:3000 tcp:3000 && expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",

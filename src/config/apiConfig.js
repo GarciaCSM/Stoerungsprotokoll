@@ -1,12 +1,21 @@
 // API Configuration
 // USB-Entwicklung (adb reverse): USE_LOCALHOST = true → localhost
 // WLAN / Tablet-Produktion:      USE_LOCALHOST = false → LAN-IP
-const USE_LOCALHOST = false; // ← true nur für USB-Entwicklung am PC
+const USE_LOCALHOST = true; // ← true nur für USB-Entwicklung am PC
 
 export const API_BASE_URL =
   __DEV__ && USE_LOCALHOST
     ? 'http://localhost:3001/api'
     : 'http://192.168.10.127:3001/api';
+
+// Raspberry Pi – direkter Kontext-Empfänger (Tablet → Pi)
+// Im Büro/Test (USE_LOCALHOST=true):  http://localhost:3000  (adb reverse + npm run test:pi-server)
+// Produktion   (USE_LOCALHOST=false): http://<PI-IP>:3000   ← echte Pi-IP eintragen
+const PI_IP = '192.168.10.127'; // ← Pi-IP hier anpassen (aktuell: PC-IP zum Testen)
+export const PI_SERVER_URL =
+  __DEV__ && USE_LOCALHOST
+    ? 'http://localhost:3000'
+    : `http://${PI_IP}:3000`;
 
 // IONOS PHP-API base (für IST-Wert via DB)
 export const IONOS_API_BASE = 'https://cosmetic-service.com/php-api/produktion';
@@ -21,6 +30,9 @@ export const API_ENDPOINTS = {
   // IST direkt aus IONOS-DB (kein lokaler Node-Server nötig)
   DB_IST: (linie, schicht, datum) =>
     `${IONOS_API_BASE}/ist.php?linie=${encodeURIComponent(linie)}&schicht=${encodeURIComponent(schicht)}&datum=${datum}`,
+  // IST pro FA (fa-ist.php)
+  FA_IST: (faNo, linie, schicht, datum) =>
+    `${IONOS_API_BASE}/fa-ist.php?fa_nr=${encodeURIComponent(faNo)}&linie=${encodeURIComponent(linie)}&schicht=${encodeURIComponent(schicht)}&datum=${datum}`,
 };
 
 // API Error Messages

@@ -289,8 +289,11 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
     setPauseRunning(false);
     setPauseStart(null);
     setPauseElapsed(0);
-    // mainTimerStartTime NICHT verschieben: elapsed zählt Wanduhr-Zeit,
-    // _pauseSec wird separat abgezogen → kein Doppelabzug
+    // Brutto-Timer Startzeit um die Pausendauer nach vorne verschieben,
+    // damit elapsed nahtlos weiterläuft ohne Sprung
+    if (mainTimerStartTime.current) {
+      mainTimerStartTime.current = mainTimerStartTime.current + added * 1000;
+    }
     return added;
   };
 
@@ -321,15 +324,16 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
       setPauseStart(Date.now());
       setPauseRunning(true);
       setActiveButton('pause');
-      // Brutto-Timer läuft weiter → SOLL-Zähler springt nicht zurück
+      setRunning(false); // Brutto-Timer einfrieren
     }
   };
 
   const handleStörungClick = (setCurrentView) => {
+    // start entering an issue selection – keep the main timer running
     prevRunningBeforeStoer.current = running;
     setCurrentView('störung');
     setActiveButton('störung');
-    setRunning(false);
+    // running remains true until the user actually picks an issue
   };
 
   const handleIssueSelect = (issueLabel) => {

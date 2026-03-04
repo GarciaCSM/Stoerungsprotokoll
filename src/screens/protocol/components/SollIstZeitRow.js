@@ -92,7 +92,7 @@ export default function SollIstZeitRow({
             <View style={s.zeitStartItem}>
               <View style={s.zeitInnerBox}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <MaterialIcons name="access-time" size={16} color={THEME.colors.dark.info} style={{ marginRight: 6 }} />
+                  <MaterialIcons name="access-time" size={13} color={THEME.colors.dark.info} style={{ marginRight: 4 }} />
                   <Text style={s.zeitPairLabel}>IST START</Text>
                 </View>
                 <Text style={s.zeitPairValue}>
@@ -105,7 +105,7 @@ export default function SollIstZeitRow({
             <View style={s.zeitStartItem}>
               <View style={s.zeitInnerBox}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <MaterialIcons name="access-time" size={16} color={THEME.colors.dark.success} style={{ marginRight: 6 }} />
+                  <MaterialIcons name="access-time" size={13} color={THEME.colors.dark.success} style={{ marginRight: 4 }} />
                   <Text style={s.zeitPairLabel}>SOLL START</Text>
                 </View>
                 <Text style={s.zeitPairValue}>--:--</Text>
@@ -124,12 +124,12 @@ export default function SollIstZeitRow({
             <View style={s.zeitPairItem}>
               <View style={s.zeitInnerBox}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <MaterialIcons name="show-chart" size={16} color={THEME.colors.dark.success} style={{ marginRight: 6 }} />
+                  <MaterialIcons name="show-chart" size={13} color={THEME.colors.dark.success} style={{ marginRight: 4 }} />
                   <Text style={[s.zeitPairLabel, { color: THEME.colors.dark.success }]}>NETTO</Text>
                 </View>
                 <Text style={[s.zeitPairValue, { color: THEME.colors.dark.success }]}>
                   {selectedFA
-                    ? formatTime(Math.max(0, timer.elapsed - _pauseSec - (timer.pauseRunning ? timer.pauseElapsed : 0) - stoerTotalSeconds))
+                    ? formatTime(Math.max(0, timer.elapsed - stoerTotalSeconds))
                     : '--:--'}
                 </Text>
               </View>
@@ -141,7 +141,7 @@ export default function SollIstZeitRow({
             <View style={s.zeitPairItem}>
               <View style={s.zeitInnerBox}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <MaterialIcons name="warning" size={16} color={THEME.colors.dark.danger} style={{ marginRight: 6 }} />
+                  <MaterialIcons name="warning" size={13} color={THEME.colors.dark.danger} style={{ marginRight: 4 }} />
                   <Text style={[s.zeitPairLabel, { color: THEME.colors.dark.danger }]}>STÖRUNG KUM.</Text>
                 </View>
                 <Text style={[s.zeitPairValue, { color: THEME.colors.dark.danger }]}>
@@ -152,7 +152,7 @@ export default function SollIstZeitRow({
             <View style={s.zeitPairItem}>
               <View style={s.zeitInnerBox}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <MaterialIcons name="free-breakfast" size={16} color={THEME.colors.dark.warning} style={{ marginRight: 6 }} />
+                  <MaterialIcons name="free-breakfast" size={13} color={THEME.colors.dark.warning} style={{ marginRight: 4 }} />
                   <Text style={[s.zeitPairLabel, { color: THEME.colors.dark.warning }]}>PAUSE KUM.</Text>
                 </View>
                 <Text style={[s.zeitPairValue, { color: THEME.colors.dark.warning }]}>

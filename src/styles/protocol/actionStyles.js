@@ -18,11 +18,11 @@ export default StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
+    paddingVertical: 20,
     paddingHorizontal: 12,
     borderRadius: 8,
     gap: 8,
-    minHeight: 48,
+    minHeight: 64,
   },
   actionButtonText: {
     fontSize: 13,

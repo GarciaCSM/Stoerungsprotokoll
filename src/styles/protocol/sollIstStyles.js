@@ -33,7 +33,7 @@ export default StyleSheet.create({
     justifyContent: 'flex-start',
   },
   zeitColumn: {
-    flex: 2,
+    flex: 1,
   },
   zeitStartRow: {
     flexDirection: 'row',
@@ -107,15 +107,15 @@ export default StyleSheet.create({
     alignItems: 'flex-start',
   },
   zeitPairLabel: {
-    fontSize: 13,
+    fontSize: 10,
     color: COLORS.foregroundMuted,
     fontWeight: '600',
-    marginBottom: 6,
+    marginBottom: 4,
     textTransform: 'uppercase',
     letterSpacing: THEME.letterSpacing.normal,
   },
   zeitPairValue: {
-    fontSize: 16,
+    fontSize: 13,
     color: COLORS.foreground,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
@@ -123,9 +123,9 @@ export default StyleSheet.create({
   },
   zeitInnerBox: {
     backgroundColor: COLORS.panel,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 9,
     borderWidth: 1,
     borderColor: COLORS.panelBorder,
     width: '100%',
@@ -136,12 +136,12 @@ export default StyleSheet.create({
     gap: 8,
   },
   zeitLabelText: {
-    fontSize: 13,
+    fontSize: 11,
     color: COLORS.foregroundMuted,
     fontWeight: '500',
   },
   zeitValue: {
-    fontSize: 16,
+    fontSize: 13,
     color: COLORS.foreground,
     fontWeight: '600',
     fontVariant: ['tabular-nums'],

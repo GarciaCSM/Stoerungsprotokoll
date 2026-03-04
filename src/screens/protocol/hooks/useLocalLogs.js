@@ -3,33 +3,38 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lineButtonConfig } from '../../../config/lineButtonConfig';
 
 /**
- * Manages local Störung logs (in AsyncStorage, scoped to today + line + shift).
+ * Manages local Störung logs (in AsyncStorage, scoped to today + line + shift + FA-Nr).
  *
  * @param {object} opts
  * @param {object} opts.shiftData        - { selectedLine, selectedLeader, selectedShift }
  * @param {boolean} opts.selectionConfirmed
  * @param {string|null} opts.localLine
  * @param {string|null} opts.localShift
+ * @param {object|null} opts.selectedFA  - currently active FA object (needs .FANr)
  */
-export function useLocalLogs({ shiftData, selectionConfirmed, localLine, localShift }) {
+export function useLocalLogs({ shiftData, selectionConfirmed, localLine, localShift, selectedFA }) {
   const [localLogs, setLocalLogs] = useState([]);
   const [viewMode, setViewMode] = useState('logs'); // 'logs' | 'summary'
 
   const effectiveLine  = selectionConfirmed ? shiftData.selectedLine  : localLine;
   const effectiveShift = selectionConfirmed ? shiftData.selectedShift : localShift;
+  const effectiveFaNr  = selectedFA?.FANr ?? null;
 
-  const loadLocalLogs = async (overrideLine, overrideShift) => {
+  const loadLocalLogs = async (overrideLine, overrideShift, overrideFaNr) => {
     try {
       const raw = await AsyncStorage.getItem('local_logs');
       const all = raw ? JSON.parse(raw) : [];
       const today = new Date().toDateString();
       const line  = overrideLine  ?? effectiveLine;
       const shift = overrideShift ?? effectiveShift;
+      const faNr  = overrideFaNr  ?? selectedFA?.FANr ?? null;
       const filtered = all.filter(e => {
-        const isToday = new Date(e.createdAt).toDateString() === today;
+        const isToday   = new Date(e.createdAt).toDateString() === today;
         const sameLine  = line  ? e.line === line  : true;
         const sameShift = shift ? (e.shift_type === shift || e.shift === shift) : true;
-        return isToday && sameLine && sameShift;
+        // When a FA is active, only show logs for that FA
+        const sameFa    = faNr  ? (e.fa_nr === faNr) : true;
+        return isToday && sameLine && sameShift && sameFa;
       });
       setLocalLogs(filtered.reverse());
     } catch (e) {
@@ -50,6 +55,7 @@ export function useLocalLogs({ shiftData, selectionConfirmed, localLine, localSh
         shift: shiftData.selectedShift,
         shift_type: shiftData.selectedShift,
         leader: shiftData.selectedLeader,
+        fa_nr: selectedFA?.FANr || null,
         issue,
         notes: notes || null,
         startTime:  new Date(startTime).toISOString(),
@@ -72,12 +78,14 @@ export function useLocalLogs({ shiftData, selectionConfirmed, localLine, localSh
       const today = new Date().toDateString();
       const line  = effectiveLine;
       const shift = effectiveShift;
+      const faNr = effectiveFaNr;
       const remaining = all.filter(e => {
         const isToday    = new Date(e.createdAt).toDateString() === today;
         const sameLine   = line  ? e.line === line  : true;
         const sameShift  = shift ? (e.shift_type === shift || e.shift === shift) : true;
-        // keep entries that are NOT (today + this line + this shift)
-        return !(isToday && sameLine && sameShift);
+        const sameFa     = faNr  ? (e.fa_nr === faNr) : true;
+        // keep entries that are NOT (today + this line + this shift + this FA)
+        return !(isToday && sameLine && sameShift && sameFa);
       });
       await AsyncStorage.setItem('local_logs', JSON.stringify(remaining));
       setLocalLogs([]);

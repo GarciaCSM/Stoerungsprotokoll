@@ -9,6 +9,7 @@ export const ShiftProvider = ({ children }) => {
     selectedLine: '',
     selectedLeader: '',
     selectedShift: '',
+    selectedBereich: '',
   });
 
   const updateShiftData = (data) => {
@@ -23,6 +24,7 @@ export const ShiftProvider = ({ children }) => {
       selectedLine: '',
       selectedLeader: '',
       selectedShift: '',
+      selectedBereich: '',
     });
   };
 

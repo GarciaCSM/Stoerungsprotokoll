@@ -18,16 +18,22 @@ const SHIFT_OPTIONS  = [
   { label: 'Frühschicht', value: 'Frühschicht' },
   { label: 'Spätschicht', value: 'Spätschicht' },
 ];
+const BEREICH_OPTIONS = [
+  { label: 'Abfüllung',  value: 'Abfüllung' },
+  { label: 'Verpackung', value: 'Verpackung' },
+];
 
 export default function SelectionBar({
   localLine, setLocalLine,
   localLeader, setLocalLeader,
   localShift, setLocalShift,
+  localBereich, setLocalBereich,
   selectionConfirmed, setSelectionConfirmed,
   lineLocked, setLineLocked,
   openSelectModal, setOpenSelectModal,
   shiftData,
   anzahlArbeiter,
+  sollPerHour,
   handleConfirmSelection,
   showConfirm,
 }) {
@@ -84,6 +90,12 @@ export default function SelectionBar({
                 <Text style={s.selectionLabelSmall}>Schicht</Text>
                 <Text style={s.selectionValueSmall}>{localShift || ''}</Text>
               </TouchableOpacity>
+
+              {/* Station */}
+              <TouchableOpacity style={s.selectionChip} onPress={() => setOpenSelectModal('bereich')}>
+                <Text style={s.selectionLabelSmall}>Station</Text>
+                <Text style={s.selectionValueSmall}>{localBereich || ''}</Text>
+              </TouchableOpacity>
             </View>
 
             <TouchableOpacity style={s.confirmSmallButton} onPress={handleConfirmSelection}>
@@ -96,6 +108,12 @@ export default function SelectionBar({
               <Text style={{ color: THEME.colors.dark.foregroundMuted, fontSize: 11 }}>Linie</Text>
               <Text style={{ color: THEME.colors.dark.foreground, fontWeight: '700', marginLeft: 8 }}>{shiftData.selectedLine}</Text>
               {lineLocked && <MaterialIcons name="lock" size={14} color={THEME.colors.dark.warning} style={{ marginLeft: 8 }} />}
+              {shiftData.selectedBereich ? (
+                <>
+                  <Text style={{ color: THEME.colors.dark.foregroundMuted, fontSize: 11, marginLeft: 12 }}>Station</Text>
+                  <Text style={{ color: THEME.colors.dark.foreground, fontWeight: '700', marginLeft: 8 }}>{shiftData.selectedBereich}</Text>
+                </>
+              ) : null}
               <Text style={{ color: THEME.colors.dark.foregroundMuted, fontSize: 11, marginLeft: 12 }}>Schicht</Text>
               <Text style={{ color: THEME.colors.dark.foreground, fontWeight: '700', marginLeft: 8 }}>{shiftData.selectedShift}</Text>
               <Text style={{ color: THEME.colors.dark.foregroundMuted, fontSize: 11, marginLeft: 12 }}>Führer</Text>
@@ -104,6 +122,14 @@ export default function SelectionBar({
               <Text style={{ color: anzahlArbeiter != null ? THEME.colors.dark.foreground : THEME.colors.dark.foregroundMuted, fontWeight: '700', marginLeft: 4 }}>
                 {anzahlArbeiter != null ? anzahlArbeiter : ''}
               </Text>
+              {sollPerHour > 0 ? (
+                <>
+                  <MaterialIcons name="speed" size={13} color={THEME.colors.dark.foregroundMuted} style={{ marginLeft: 12 }} />
+                  <Text style={{ color: THEME.colors.dark.foreground, fontWeight: '700', marginLeft: 4 }}>
+                    {sollPerHour}/h
+                  </Text>
+                </>
+              ) : null}
             </View>
             <TouchableOpacity onPress={() => setSelectionConfirmed(false)}>
               <Text style={s.editSelectionText}>Ändern</Text>
@@ -118,21 +144,22 @@ export default function SelectionBar({
           <View style={s.modalSelectCard}>
             <View style={s.modalHeaderRow}>
               <Text style={s.modalTitle}>
-                {openSelectModal === 'line' ? 'Linie wählen' : openSelectModal === 'leader' ? 'Linienführer wählen' : 'Schicht wählen'}
+                {openSelectModal === 'line' ? 'Linie wählen' : openSelectModal === 'leader' ? 'Linienführer wählen' : openSelectModal === 'bereich' ? 'Station wählen' : 'Schicht wählen'}
               </Text>
               <TouchableOpacity onPress={() => setOpenSelectModal(null)}>
                 <Text style={s.modalClose}>✕</Text>
               </TouchableOpacity>
             </View>
             <ScrollView>
-              {(openSelectModal === 'line' ? LINE_OPTIONS : openSelectModal === 'leader' ? LEADER_OPTIONS : SHIFT_OPTIONS).map((opt) => (
+              {(openSelectModal === 'line' ? LINE_OPTIONS : openSelectModal === 'leader' ? LEADER_OPTIONS : openSelectModal === 'bereich' ? BEREICH_OPTIONS : SHIFT_OPTIONS).map((opt) => (
                 <TouchableOpacity
                   key={opt.value}
                   style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: THEME.colors.dark.border }}
                   onPress={() => {
-                    if (openSelectModal === 'line')   setLocalLine(opt.value);
-                    if (openSelectModal === 'leader') setLocalLeader(opt.value);
-                    if (openSelectModal === 'shift')  setLocalShift(opt.value);
+                    if (openSelectModal === 'line')    setLocalLine(opt.value);
+                    if (openSelectModal === 'leader')  setLocalLeader(opt.value);
+                    if (openSelectModal === 'shift')   setLocalShift(opt.value);
+                    if (openSelectModal === 'bereich') setLocalBereich(opt.value);
                     setOpenSelectModal(null);
                   }}
                 >

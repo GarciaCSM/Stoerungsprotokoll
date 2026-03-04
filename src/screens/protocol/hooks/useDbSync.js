@@ -37,6 +37,7 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
   const buildSessionPayload = useCallback(() => {
     if (!shiftData?.selectedLine || !shiftData?.selectedShift) return null;
 
+    // current date in YYYY-MM-DD format
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
     // timer_start_time: epoch ms → MySQL DATETIME string
@@ -48,6 +49,7 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     return {
       linie:                shiftData.selectedLine,
       schicht:              shiftData.selectedShift,
+      bereich:              shiftData.selectedBereich    || null,
       datum:                today,
       linienfuehrer:        shiftData.selectedLeader   || null,
       fa_nr:                selectedFA?.FANr           || null,
@@ -119,6 +121,7 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
   const syncStoerung = useCallback(async ({ issue, startTime, endTime, durationSeconds, notes }) => {
     if (!shiftData?.selectedLine || !shiftData?.selectedShift) return;
 
+    // send tomorrow's date
     const today = new Date().toISOString().slice(0, 10);
     const lineNumber = shiftData.selectedLine?.match(/\d+/)?.[0] ?? shiftData.selectedLine;
 
@@ -126,6 +129,7 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       linie:           shiftData.selectedLine,
       linie_nummer:    lineNumber,
       schicht:         shiftData.selectedShift,
+      bereich:         shiftData.selectedBereich        || null,
       datum:           today,
       linienfuehrer:   shiftData.selectedLeader || null,
       fa_nr:           selectedFA?.FANr         || null,

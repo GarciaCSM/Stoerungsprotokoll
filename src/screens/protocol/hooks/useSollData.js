@@ -53,24 +53,30 @@ export function useSollData({ selectedFA, shiftData }) {
     }
   }, [selectedFA, sollMap, arbeitMap]);
 
-  // ─── Poll IST value from IONOS DB ───────────────────────────────────────────
+  // ─── Poll IST value – FA-spezifisch aus stprot_fa_ist ───────────────────────────────
   useEffect(() => {
+    if (!selectedFA?.FANr) {
+      setIstValue(0);
+      return;
+    }
     let mounted = true;
-    const datum = new Date().toISOString().slice(0, 10);
+    // query IST for tomorrow
+    const datum   = new Date().toISOString().slice(0, 10);
     const linie   = shiftData?.selectedLine;
     const schicht = shiftData?.selectedShift;
+    const faNo    = selectedFA.FANr;
 
     const poll = async () => {
       try {
         if (!linie || !schicht) { if (mounted) setIstValue(0); return; }
-        const v = await FAService.getDbIst(linie, schicht, datum);
+        const v = await FAService.getFaIst(faNo, linie, schicht, datum);
         if (mounted) setIstValue(v);
       } catch (_) {}
     };
     poll();
     const timer = setInterval(poll, 1000);
     return () => { mounted = false; clearInterval(timer); };
-  }, [shiftData?.selectedLine, shiftData?.selectedShift]);
+  }, [selectedFA?.FANr, shiftData?.selectedLine, shiftData?.selectedShift]);
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
   const normKey = (v) => String(v).trim().replace(/\s+/g, '').toUpperCase();

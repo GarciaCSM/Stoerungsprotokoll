@@ -75,7 +75,7 @@ const server = app.listen(API_CONFIG.PORT, API_CONFIG.HOST, () => {
   console.log(`  Status:           Running`);
   console.log(`  Listen on:        ${API_CONFIG.HOST}:${API_CONFIG.PORT}`);
   console.log(
-    `  (env PORT=${process.env.PORT || '<unset>'}  default=5000)`
+    `  (env PORT=${process.env.PORT || '<unset>'}  default=3001)`
   );
   console.log(`  Local URL:        http://localhost:${API_CONFIG.PORT}`);
   // build a list of non-internal IPv4 addresses to show as network URLs

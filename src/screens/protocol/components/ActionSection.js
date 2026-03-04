@@ -35,6 +35,7 @@ export default function ActionSection({
   currentView, setCurrentView,
   timer,
   selectedFA,
+  selectionConfirmed,
   showConfirm,
   setFaSearchError,
   effectiveLine,
@@ -42,6 +43,8 @@ export default function ActionSection({
   onEnde,
   formatTime,
 }) {
+  // All buttons are locked until a shift is confirmed (and unlocked again after Ende)
+  const allDisabled = !selectionConfirmed;
   return (
     <>
       {/* Active Störung timer */}
@@ -74,69 +77,79 @@ export default function ActionSection({
           {timer.showStartOnly ? (
             <View style={s.buttonsRow}>
               <TouchableOpacity
-                style={[s.actionButton, s.startButton, !selectedFA && s.actionButtonDisabled]}
+                style={[s.actionButton, s.startButton, (allDisabled || !selectedFA) && s.actionButtonDisabled]}
                 onPress={() => showConfirm({
                   title: 'Weiter',
                   message: 'Produktion fortsetzen?',
                   onConfirm: () => timer.handleStart(selectedFA, setFaSearchError, setCurrentView),
                 })}
-                disabled={!selectedFA}
+                disabled={allDisabled || !selectedFA}
               >
-                <MaterialIcons name="play-arrow" size={20} color={selectedFA ? THEME.colors.dark.foreground : THEME.colors.dark.foregroundMuted} />
-                <Text style={[s.actionButtonText, !selectedFA && s.actionButtonTextDisabled]}>Weiter</Text>
+                <MaterialIcons name="play-arrow" size={20} color={(allDisabled || !selectedFA) ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.foreground} />
+                <Text style={[s.actionButtonText, (allDisabled || !selectedFA) && s.actionButtonTextDisabled]}>Weiter</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[s.actionButton, s.modalCancel]} onPress={() => timer.handleCancelStoer(setCurrentView)}>
-                <Text style={s.modalCancelText}>Abbrechen</Text>
+              <TouchableOpacity
+                style={[s.actionButton, s.modalCancel, allDisabled && s.actionButtonDisabled]}
+                onPress={() => timer.handleCancelStoer(setCurrentView)}
+                disabled={allDisabled}
+              >
+                <Text style={[s.modalCancelText, allDisabled && s.actionButtonTextDisabled]}>Abbrechen</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <View style={s.buttonsRow}>
               {/* Start / Weiter */}
               <TouchableOpacity
-                style={[s.actionButton, s.startButton, timer.activeButton === 'start' && s.actionButtonActive, !selectedFA && s.actionButtonDisabled]}
+                style={[s.actionButton, s.startButton, timer.activeButton === 'start' && s.actionButtonActive, (allDisabled || !selectedFA) && s.actionButtonDisabled]}
                 onPress={() => showConfirm({
                   title: timer.pauseRunning ? 'Weiter' : 'Produktion starten',
                   message: timer.pauseRunning ? 'Produktion fortsetzen?' : 'Produktion jetzt starten?',
                   onConfirm: () => timer.handleStart(selectedFA, setFaSearchError, setCurrentView),
                 })}
-                disabled={!selectedFA || (timer.activeButton === 'start' && !timer.pauseRunning)}
+                disabled={allDisabled || !selectedFA || (timer.activeButton === 'start' && !timer.pauseRunning)}
               >
-                <MaterialIcons name="play-arrow" size={20} color={selectedFA ? THEME.colors.dark.foreground : THEME.colors.dark.foregroundMuted} />
-                <Text style={[s.actionButtonText, !selectedFA && s.actionButtonTextDisabled]}>
+                <MaterialIcons name="play-arrow" size={20} color={(allDisabled || !selectedFA) ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.foreground} />
+                <Text style={[s.actionButtonText, (allDisabled || !selectedFA) && s.actionButtonTextDisabled]}>
                   {timer.pauseRunning ? 'Weiter' : 'Produktion starten'}
                 </Text>
               </TouchableOpacity>
 
               {/* Störung */}
               <TouchableOpacity
-                style={[s.actionButton, s.stoerungButton, timer.activeButton === 'störung' && s.actionButtonActive]}
+                style={[s.actionButton, s.stoerungButton, timer.activeButton === 'störung' && s.actionButtonActive, allDisabled && s.actionButtonDisabled]}
                 onPress={() => timer.handleStörungClick(setCurrentView)}
+                disabled={allDisabled}
               >
-                <MaterialIcons name="warning" size={20} color={THEME.colors.dark.foreground} />
-                <Text style={s.actionButtonText}>Störung melden</Text>
+                <MaterialIcons name="warning" size={20} color={allDisabled ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.foreground} />
+                <Text style={[s.actionButtonText, allDisabled && s.actionButtonTextDisabled]}>Störung melden</Text>
               </TouchableOpacity>
 
               {/* Pause */}
               <TouchableOpacity
-                style={[s.actionButton, s.pauseButton, timer.activeButton === 'pause' && s.actionButtonActive, !selectedFA && s.actionButtonDisabled]}
-                onPress={() => timer.handlePause(selectedFA, setFaSearchError)}
-                disabled={!selectedFA}
+                style={[s.actionButton, s.pauseButton, timer.activeButton === 'pause' && s.actionButtonActive, (allDisabled || !selectedFA) && s.actionButtonDisabled]}
+                onPress={() => showConfirm({
+                  title: timer.pauseRunning ? 'Pause beenden' : 'Pause starten',
+                  message: timer.pauseRunning ? 'Möchtest du die Pause beenden und weiterproduzieren?' : 'Möchtest du die Produktion anhalten (Pause)?',
+                  onConfirm: () => timer.handlePause(selectedFA, setFaSearchError),
+                })}
+                disabled={allDisabled || !selectedFA}
               >
-                <MaterialIcons name="pause" size={20} color={selectedFA ? THEME.colors.dark.foreground : THEME.colors.dark.foregroundMuted} />
-                <Text style={[s.actionButtonText, !selectedFA && s.actionButtonTextDisabled]}>Pause setzen</Text>
+                <MaterialIcons name="pause" size={20} color={(allDisabled || !selectedFA) ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.foreground} />
+                <Text style={[s.actionButtonText, (allDisabled || !selectedFA) && s.actionButtonTextDisabled]}>Pause setzen</Text>
               </TouchableOpacity>
 
               {/* Schicht beenden */}
               <TouchableOpacity
-                style={[s.actionButton, s.endeButton]}
+                style={[s.actionButton, s.endeButton, allDisabled && s.actionButtonDisabled]}
                 onPress={() => showConfirm({
-                  title: 'Schicht beenden',
-                  message: 'Bist du sicher, dass du die Schicht beenden möchtest?',
+                  title: 'Auftrags-/Schichtende',
+                  message: 'Bist du sicher, dass du die Schicht/Auftrag beenden möchtest?',
                   onConfirm: onEnde,
                 })}
+                disabled={allDisabled}
               >
-                <MaterialIcons name="stop" size={20} color={THEME.colors.dark.foreground} />
-                <Text style={s.actionButtonText}>Schicht beenden</Text>
+                <MaterialIcons name="stop" size={20} color={allDisabled ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.foreground} />
+                <Text style={[s.actionButtonText, allDisabled && s.actionButtonTextDisabled]}>Auftrags-/Schichtende</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -150,7 +163,7 @@ export default function ActionSection({
           <StörungGrid
             buttons={lineButtonConfig[effectiveLine].störung}
             onSelect={(label) => { timer.handleIssueSelect(label); setCurrentView('initial'); }}
-            onClose={() => setCurrentView('initial')}
+            onClose={() => timer.handleCancelStoer(setCurrentView)}
           />
         </View>
       )}

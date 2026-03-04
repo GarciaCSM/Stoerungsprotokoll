@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ConfirmModal from '../components/ConfirmModal';
 import { useShift } from '../context/ShiftContext';
@@ -9,7 +9,7 @@ import { lineButtonConfig } from '../config/lineButtonConfig';
 import { MaterialIcons } from '@expo/vector-icons';
 import FAService from '../services/faService';
 import { formatTime } from '../utils/helper';
-import { API_BASE_URL } from '../config/apiConfig';
+import { API_BASE_URL, PI_SERVER_URL } from '../config/apiConfig';
 
 import { useProductionTimer } from './protocol/hooks/useProductionTimer';
 import { useSollData } from './protocol/hooks/useSollData';
@@ -21,9 +21,8 @@ import SollIstZeitRow from './protocol/components/SollIstZeitRow';
 import ActionSection  from './protocol/components/ActionSection';
 import LogsSection    from './protocol/components/LogsSection';
 
-// PI_SERVER_URL automatisch aus API_BASE_URL ableiten (entfernt /api Suffix)
-// → USB-Dev: localhost:3001, WLAN/Tablet: 192.168.10.127:3001
-const PI_SERVER_URL = API_BASE_URL.replace(/\/api$/, '');
+// PI_SERVER_URL kommt jetzt direkt aus apiConfig → zeigt auf den Raspberry Pi
+// Produktion: http://<PI-IP>:3000 | Test: http://localhost:3000 (npm run test:pi-server)
 
 
 //  Constants 
@@ -40,9 +39,10 @@ const ProtocolScreen = () => {
 
   //  Shift selection state 
   const [currentView, setCurrentView]         = useState('initial');
-  const [localLine, setLocalLine]             = useState(shiftData.selectedLine   || null);
-  const [localLeader, setLocalLeader]         = useState(shiftData.selectedLeader || null);
-  const [localShift, setLocalShift]           = useState(shiftData.selectedShift  || null);
+  const [localLine, setLocalLine]             = useState(shiftData.selectedLine    || null);
+  const [localLeader, setLocalLeader]         = useState(shiftData.selectedLeader  || null);
+  const [localShift, setLocalShift]           = useState(shiftData.selectedShift   || null);
+  const [localBereich, setLocalBereich]       = useState(shiftData.selectedBereich || null);
   const [selectionConfirmed, setSelectionConfirmed] = useState(
     !!(shiftData.selectedLine && shiftData.selectedLeader && shiftData.selectedShift)
   );
@@ -66,6 +66,12 @@ const ProtocolScreen = () => {
   // → useEffect darf den laufenden Timer NICHT anfassen
   const skipTimerRestoreRef = useRef(false);
 
+  // helper to form storage key; include optional station
+  const faStorageKey = (line, shift, station) => {
+    const st = station ? station : '';
+    return `selected_fa:${line}:${shift}:${st}`;
+  };
+
   // Persist FA whenever it changes — skip the very first render (null initial state)
   // to avoid overwriting the stored value before the restore effect reads it
   useEffect(() => {
@@ -84,9 +90,11 @@ const ProtocolScreen = () => {
     (async () => {
       try {
         if (!selectionConfirmed) return;
-        const line = shiftData.selectedLine; const shift = shiftData.selectedShift;
+        const line = shiftData.selectedLine;
+        const shift = shiftData.selectedShift;
+        const station = shiftData.selectedBereich;
         if (!line || !shift) return;
-        const key = `selected_fa:${line}:${shift}`;
+        const key = faStorageKey(line, shift, station);
         if (selectedFA) await AsyncStorage.setItem(key, JSON.stringify(selectedFA));
         else await AsyncStorage.removeItem(key);
       } catch (e) {
@@ -100,7 +108,7 @@ const ProtocolScreen = () => {
     localLogs, viewMode, setViewMode,
     loadLocalLogs, saveStoerLog, clearAllLocalLogs, computeIssueSummary,
     setLocalLogsFromServer,
-  } = useLocalLogs({ shiftData, selectionConfirmed, localLine, localShift });
+  } = useLocalLogs({ shiftData, selectionConfirmed, localLine, localShift, selectedFA });
 
   // saveStoerLog mit DB-Sync wrappen – wird an useProductionTimer übergeben
   const saveStoerLogWithSync = async (args) => {
@@ -163,7 +171,26 @@ const ProtocolScreen = () => {
   const netSec = getSollGrossElapsed();
   const expectedIst        = _soll > 0 ? (netSec / 3600) * _soll : 0;
   const expectedIstRounded = Math.round(expectedIst);
-  const istDiff            = _ist - expectedIstRounded;
+
+  // Freeze the SOLL number when pause is active but let the clock keep running.
+  // We use refs so the snapshot happens synchronously during render (no async effect delay).
+  const pauseWasRunningRef   = React.useRef(false);
+  const frozenExpectedIstRef = React.useRef(null);
+  if (timer.pauseRunning && !pauseWasRunningRef.current) {
+    // pause just started → take snapshot now
+    frozenExpectedIstRef.current = expectedIstRounded;
+  }
+  if (!timer.pauseRunning) {
+    frozenExpectedIstRef.current = null;
+  }
+  pauseWasRunningRef.current = timer.pauseRunning;
+
+  const displayExpectedIst =
+    timer.pauseRunning && frozenExpectedIstRef.current != null
+      ? frozenExpectedIstRef.current
+      : expectedIstRounded;
+
+  const istDiff            = _ist - displayExpectedIst;
 
   const getIstStatus = () => {
     if (!timer.running && timer.elapsed === 0) return 'neutral';
@@ -189,13 +216,13 @@ const ProtocolScreen = () => {
 
   const stoerTotalSeconds = localLogs.reduce((s, l) => s + (l.durationSeconds || 0), 0);
 
-  //  Load logs + restore pause totals on selection change 
+  //  Load logs + restore pause totals on selection change (also on FA change)
   useEffect(() => {
     const line  = selectionConfirmed ? shiftData.selectedLine  : localLine;
     const shift = selectionConfirmed ? shiftData.selectedShift : localShift;
     loadLocalLogs(line, shift);
     timer.restorePauseTotalsForSelection(shiftData.selectedLine, shiftData.selectedShift);
-  }, [shiftData.selectedLine, shiftData.selectedShift, localLine, localShift, selectionConfirmed]);
+  }, [shiftData.selectedLine, shiftData.selectedShift, localLine, localShift, selectionConfirmed, selectedFA?.FANr]);
 
   // ── Wenn Schicht bestätigt ist (oder App neu geöffnet während Schicht läuft):
   //     lade Session + Störungen aus der DB (Server gewinnt laut Einstellung).
@@ -213,8 +240,12 @@ const ProtocolScreen = () => {
         if (!mounted) return;
         // Session (Timer + FA) aus DB wiederherstellen
         await applyDbSession(session);
-        if (Array.isArray(stoerungen) && stoerungen.length) {
-          const incoming = stoerungen.map(s => ({
+        // Nur Störungen des aktiven Auftrags laden
+        const activeFaNr = session?.fa_nr;
+        if (Array.isArray(stoerungen) && stoerungen.length && activeFaNr) {
+          const incoming = stoerungen
+            .filter(s => s.fa_nr === activeFaNr)
+            .map(s => ({
             id: s.id || Date.now(),
             type: 'störung',
             line: s.linie,
@@ -246,27 +277,30 @@ const ProtocolScreen = () => {
       try {
         // Restore selected FA
         const rawFA = await AsyncStorage.getItem('selected_fa');
-        if (rawFA) { try { setSelectedFA(JSON.parse(rawFA)); } catch {} }
+        let restoredFA = null;
+        if (rawFA) { try { restoredFA = JSON.parse(rawFA); setSelectedFA(restoredFA); } catch {} }
 
         const assigned = await AsyncStorage.getItem('assigned_line');
         const leader   = await AsyncStorage.getItem('assigned_leader');
         const shift    = await AsyncStorage.getItem('assigned_shift');
+        const bereich  = await AsyncStorage.getItem('assigned_bereich');
         const locked   = await AsyncStorage.getItem('assigned_line_locked');
         if (assigned) setLocalLine(assigned);
         if (leader)   setLocalLeader(leader);
         if (shift)    setLocalShift(shift);
+        if (bereich)  setLocalBereich(bereich);
         if      (locked === 'false')   setLineLocked(false);
         else if (locked === 'true')    setLineLocked(true);
         else if (assigned)             setLineLocked(true);
         if (assigned && leader && shift) {
-          updateShiftData({ selectedLine: assigned, selectedLeader: leader, selectedShift: shift });
+          updateShiftData({ selectedLine: assigned, selectedLeader: leader, selectedShift: shift, selectedBereich: bereich || null });
           setSelectionConfirmed(true);
           // Pi-Server beim App-Start sofort über aktuelle Linie/Schicht informieren
           if (PI_SERVER_URL) {
             fetch(`${PI_SERVER_URL}/context`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ linie: assigned, schicht: shift })
+              body: JSON.stringify({ linie: assigned, schicht: shift, bereich: bereich || null, fa_nr: restoredFA?.FANr || null })
             }).catch(() => {});
           }
         }
@@ -294,12 +328,26 @@ const ProtocolScreen = () => {
     setSelectedFA(newFA);
     setFaSearchText(''); setFaSearchResults([]); setFaSearchError('');
 
+    // Pi-Server über neue FA und aktuellen Kontext informieren
+    if (PI_SERVER_URL) {
+      fetch(`${PI_SERVER_URL}/context`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          linie:  shiftData.selectedLine  || null,
+          schicht: shiftData.selectedShift || null,
+          bereich: localBereich || null,
+          fa_nr:   fa.FANr,
+        }),
+      }).catch(() => {});
+    }
+
     // Prüfe ob für diese FA heute auf dieser Linie/Schicht eine Session gespeichert ist.
     // Falls ja → Brutto-Start, Netto-Zeit, Pausen, IST-Stk wiederherstellen (selbe Produktion).
     // Falls eine andere FA gespeichert ist → Timer zurücksetzen (neue Produktion).
     if (!shiftData?.selectedLine || !shiftData?.selectedShift) return;
     try {
-      const { session } = await dbSync.loadFromDb();
+      const { session, stoerungen } = await dbSync.loadFromDb();
       if (session && session.fa_nr === fa.FANr) {
         // Gleiche FA wie in DB → alles wiederherstellen
         await timer.applyRemoteSession(session);
@@ -308,15 +356,42 @@ const ProtocolScreen = () => {
         await timer.resetTimer();
       }
       // Kein session → nichts tun (frischer Start)
+
+      // Störungen für diese FA laden (DB + AsyncStorage) – bereits per FA gefiltert
+      if (Array.isArray(stoerungen) && stoerungen.length) {
+        const incoming = stoerungen
+          .filter(s => s.fa_nr === fa.FANr)
+          .map(s => ({
+            id: s.id || Date.now(),
+            type: 'störung',
+            line: s.linie,
+            lineNumber: s.linie_nummer || (s.linie?.match(/\d+/)?.[0] || s.linie),
+            shift: s.schicht,
+            shift_type: s.schicht,
+            leader: s.linienfuehrer || null,
+            fa_nr: s.fa_nr,
+            issue: s.stoerung_typ,
+            notes: s.notiz || null,
+            startTime: new Date(s.start_time).toISOString(),
+            endTime: new Date(s.end_time).toISOString(),
+            durationSeconds: Number(s.dauer_sekunden || 0),
+            createdAt: s.erstellt_am || new Date().toISOString(),
+          }));
+        setLocalLogsFromServer(incoming);
+      } else {
+        // Keine DB-Störungen für diese FA → aus AsyncStorage laden (FA-gefiltert via hook)
+        loadLocalLogs(shiftData.selectedLine, shiftData.selectedShift, fa.FANr);
+      }
     } catch (e) {
       console.warn('[handleSelectFA] DB-Session-Lookup fehlgeschlagen:', e.message);
     }
   };
 
   //  Persist helpers 
-  const persistLine   = async (v) => { try { v ? await AsyncStorage.setItem('assigned_line',   v) : await AsyncStorage.removeItem('assigned_line');   } catch {} };
-  const persistLeader = async (v) => { try { v ? await AsyncStorage.setItem('assigned_leader', v) : await AsyncStorage.removeItem('assigned_leader'); } catch {} };
-  const persistShift  = async (v) => { try { v ? await AsyncStorage.setItem('assigned_shift',  v) : await AsyncStorage.removeItem('assigned_shift');  } catch {} };
+  const persistLine    = async (v) => { try { v ? await AsyncStorage.setItem('assigned_line',    v) : await AsyncStorage.removeItem('assigned_line');    } catch {} };
+  const persistLeader  = async (v) => { try { v ? await AsyncStorage.setItem('assigned_leader',  v) : await AsyncStorage.removeItem('assigned_leader');  } catch {} };
+  const persistShift   = async (v) => { try { v ? await AsyncStorage.setItem('assigned_shift',   v) : await AsyncStorage.removeItem('assigned_shift');   } catch {} };
+  const persistBereich = async (v) => { try { v ? await AsyncStorage.setItem('assigned_bereich', v) : await AsyncStorage.removeItem('assigned_bereich'); } catch {} };
 
   const handleConfirmSelection = async () => {
     if (!localLine || !localLeader || !localShift) return;
@@ -335,8 +410,8 @@ const ProtocolScreen = () => {
       // ── Gleiche Linie + Schicht: nur Linienführer aktualisieren, Timer läuft weiter ──
       if (sameSelection) {
         skipTimerRestoreRef.current = true; // useEffect soll Timer NICHT neu laden
-        updateShiftData({ selectedLine: localLine, selectedLeader: localLeader, selectedShift: localShift });
-        await persistLeader(localLeader);
+        updateShiftData({ selectedLine: localLine, selectedLeader: localLeader, selectedShift: localShift, selectedBereich: localBereich });
+        await persistLeader(localLeader); await persistBereich(localBereich);
         await AsyncStorage.setItem('assigned_line_locked', 'true');
         setLineLocked(true); setSelectionConfirmed(true);
         return; // Timer nicht anfassen – Produktion läuft unverändert weiter
@@ -348,22 +423,25 @@ const ProtocolScreen = () => {
       if (prevLine && prevShift) {
         try {
           await timer.saveStateForSelection(prevLine, prevShift, true);
-          if (selectedFA) await AsyncStorage.setItem(`selected_fa:${prevLine}:${prevShift}`, JSON.stringify(selectedFA));
+          if (selectedFA) {
+            const prevStation = shiftData.selectedBereich;
+            await AsyncStorage.setItem(faStorageKey(prevLine, prevShift, prevStation), JSON.stringify(selectedFA));
+          }
         } catch (e) { console.warn('Failed to save previous shift data', e); }
       }
 
       // 2) Neue Auswahl übernehmen
-      updateShiftData({ selectedLine: localLine, selectedLeader: localLeader, selectedShift: localShift });
-      await persistLine(localLine); await persistLeader(localLeader); await persistShift(localShift);
+      updateShiftData({ selectedLine: localLine, selectedLeader: localLeader, selectedShift: localShift, selectedBereich: localBereich });
+      await persistLine(localLine); await persistLeader(localLeader); await persistShift(localShift); await persistBereich(localBereich);
       await AsyncStorage.setItem('assigned_line_locked', 'true');
       setLineLocked(true); setSelectionConfirmed(true);
 
-      // inform Pi‑Server über aktualisierte Linie/Schicht
+      // inform Pi‑Server über aktualisierte Linie/Schicht/Bereich/FA
       if (PI_SERVER_URL) {
         fetch(`${PI_SERVER_URL}/context`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ linie: localLine, schicht: localShift })
+          body: JSON.stringify({ linie: localLine, schicht: localShift, bereich: localBereich, fa_nr: selectedFA?.FANr || null })
         }).catch(() => {});
       }
 
@@ -376,8 +454,12 @@ const ProtocolScreen = () => {
           await applyDbSession(session);
           dbSessionRestored = true;
         }
-        if (Array.isArray(stoerungen) && stoerungen.length) {
-          const incoming = stoerungen.map(s => ({
+        // Nur Störungen des aktiven Auftrags laden
+        const activeFaNr = session?.fa_nr || selectedFA?.FANr;
+        if (Array.isArray(stoerungen) && stoerungen.length && activeFaNr) {
+          const incoming = stoerungen
+            .filter(s => s.fa_nr === activeFaNr)
+            .map(s => ({
             id: s.id || Date.now(),
             type: 'störung',
             line: s.linie,
@@ -403,7 +485,7 @@ const ProtocolScreen = () => {
           if (!loaded) await timer.resetTimer();
         } catch (e) { console.warn('Failed to restore timer for new selection', e); }
         try {
-          const rawPerFa = await AsyncStorage.getItem(`selected_fa:${localLine}:${localShift}`);
+          const rawPerFa = await AsyncStorage.getItem(faStorageKey(localLine, localShift, localBereich));
           if (rawPerFa) {
             try { setSelectedFA(JSON.parse(rawPerFa)); } catch {}
           } else {
@@ -444,10 +526,24 @@ const ProtocolScreen = () => {
     await timer.resetTimer();
     try { await AsyncStorage.removeItem('assigned_leader'); } catch {}
     try { await AsyncStorage.removeItem('assigned_shift');  } catch {}
+    try { await AsyncStorage.removeItem('assigned_bereich'); } catch {}
+    // also clear stored FA for this completed shift/station
+    try {
+      const key = faStorageKey(shiftData.selectedLine, shiftData.selectedShift, shiftData.selectedBereich);
+      await AsyncStorage.removeItem(key);
+    } catch {}
     try { await AsyncStorage.removeItem('selected_fa');     } catch {}
-    updateShiftData({ selectedLine: shiftData.selectedLine || null, selectedLeader: null, selectedShift: null });
-    setSelectionConfirmed(false); setLocalLeader(null); setLocalShift(null);
+    updateShiftData({ selectedLine: shiftData.selectedLine || null, selectedLeader: null, selectedShift: null, selectedBereich: null });
+    setSelectionConfirmed(false); setLocalLeader(null); setLocalShift(null); setLocalBereich(null);
     setSelectedFA(null);
+    // FA aus Pi-Kontext löschen
+    if (PI_SERVER_URL) {
+      fetch(`${PI_SERVER_URL}/context`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fa_nr: null }),
+      }).catch(() => {});
+    }
   };
 
   // 
@@ -473,11 +569,13 @@ const ProtocolScreen = () => {
         localLine={localLine} setLocalLine={setLocalLine}
         localLeader={localLeader} setLocalLeader={setLocalLeader}
         localShift={localShift} setLocalShift={setLocalShift}
+        localBereich={localBereich} setLocalBereich={setLocalBereich}
         selectionConfirmed={selectionConfirmed} setSelectionConfirmed={setSelectionConfirmed}
         lineLocked={lineLocked} setLineLocked={setLineLocked}
         openSelectModal={openSelectModal} setOpenSelectModal={setOpenSelectModal}
         shiftData={shiftData}
         anzahlArbeiter={anzahlArbeiter}
+        sollPerHour={sollPerHour}
         handleConfirmSelection={handleConfirmSelection}
         showConfirm={showConfirm}
       />
@@ -492,15 +590,25 @@ const ProtocolScreen = () => {
             selectedFA={selectedFA}
             handleFASearch={handleFASearch}
             handleSelectFA={handleSelectFA}
-            onRemoveFA={() => setSelectedFA(null)}
+            onRemoveFA={() => {
+              setSelectedFA(null);
+              if (PI_SERVER_URL) {
+                fetch(`${PI_SERVER_URL}/context`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ fa_nr: null }),
+                }).catch(() => {});
+              }
+            }}
             showConfirm={showConfirm}
+            selectionReady={selectionConfirmed && !!shiftData.selectedBereich}
           />
           <SollIstZeitRow
             timer={timer}
             selectedFA={selectedFA}
             sollPerHour={sollPerHour}
             _soll={_soll} _ist={_ist} _pauseSec={_pauseSec}
-            expectedIstRounded={expectedIstRounded}
+            expectedIstRounded={displayExpectedIst}
             istDiff={istDiff} istStatus={istStatus} istColor={istColor}
             stoerTotalSeconds={stoerTotalSeconds}
             isImportingSoll={isImportingSoll} isFetchingSoll={isFetchingSoll}
@@ -513,6 +621,7 @@ const ProtocolScreen = () => {
           currentView={currentView} setCurrentView={setCurrentView}
           timer={timer}
           selectedFA={selectedFA}
+          selectionConfirmed={selectionConfirmed}
           showConfirm={showConfirm}
           setFaSearchError={setFaSearchError}
           effectiveLine={effectiveLine}
@@ -521,7 +630,7 @@ const ProtocolScreen = () => {
           formatTime={formatTime}
         />
 
-        {!timer.selectedIssue && currentView !== 'störung' && (
+        {selectionConfirmed && !timer.selectedIssue && currentView !== 'störung' && (
           <LogsSection
             localLogs={localLogs}
             viewMode={viewMode} setViewMode={setViewMode}
@@ -534,6 +643,169 @@ const ProtocolScreen = () => {
           />
         )}
       </ScrollView>
+
+      {/* ── Pause Overlay ────────────────────────────────────── */}
+      <Modal
+        visible={timer.pauseRunning}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(15, 40, 120, 0.82)',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <View style={{
+            alignItems: 'center',
+            paddingHorizontal: 40,
+            paddingVertical: 48,
+            borderRadius: 24,
+            backgroundColor: 'rgba(30, 64, 175, 0.55)',
+            borderWidth: 1,
+            borderColor: 'rgba(147, 197, 253, 0.3)',
+            gap: 16,
+            minWidth: 300,
+          }}>
+            <MaterialIcons name="free-breakfast" size={72} color="rgba(147, 197, 253, 0.95)" />
+            <Text style={{
+              fontSize: 32,
+              fontWeight: '800',
+              color: '#EFF6FF',
+              letterSpacing: 1,
+              marginTop: 8,
+            }}>PAUSE</Text>
+            <Text style={{
+              fontSize: 16,
+              color: 'rgba(219, 234, 254, 0.85)',
+              textAlign: 'center',
+              lineHeight: 24,
+            }}>Du befindest dich in der Pause.{`\n`}Die Produktion ist angehalten.</Text>
+            <Text style={{
+              fontSize: 48,
+              fontWeight: '700',
+              color: '#BFDBFE',
+              letterSpacing: 2,
+              fontVariant: ['tabular-nums'],
+              marginTop: 8,
+            }}>{formatTime(timer.pauseElapsed)}</Text>
+            <TouchableOpacity
+              onPress={() => showConfirm({
+                title: 'Pause beenden',
+                message: 'Möchtest du die Pause beenden und weiterproduzieren?',
+                onConfirm: () => timer.handleStart(selectedFA, setFaSearchError, setCurrentView),
+              })}
+              style={{
+                marginTop: 24,
+                backgroundColor: 'rgba(59, 130, 246, 0.9)',
+                paddingVertical: 16,
+                paddingHorizontal: 48,
+                borderRadius: 14,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 10,
+                borderWidth: 1,
+                borderColor: 'rgba(147, 197, 253, 0.5)',
+              }}
+            >
+              <MaterialIcons name="play-arrow" size={24} color="#EFF6FF" />
+              <Text style={{ fontSize: 18, fontWeight: '700', color: '#EFF6FF' }}>Pause beenden</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Störung Overlay ─────────────────────────────────── */}
+      <Modal
+        visible={!!(timer.stoerRunning && timer.selectedIssue)}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(100, 10, 10, 0.82)',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <View style={{
+            alignItems: 'center',
+            paddingHorizontal: 40,
+            paddingVertical: 48,
+            borderRadius: 24,
+            backgroundColor: 'rgba(153, 27, 27, 0.55)',
+            borderWidth: 1,
+            borderColor: 'rgba(252, 165, 165, 0.3)',
+            gap: 16,
+            minWidth: 300,
+            maxWidth: 460,
+          }}>
+            <MaterialIcons name="warning" size={72} color="rgba(252, 165, 165, 0.95)" />
+            <Text style={{
+              fontSize: 32,
+              fontWeight: '800',
+              color: '#FEF2F2',
+              letterSpacing: 1,
+              marginTop: 8,
+            }}>STÖRUNG AKTIV</Text>
+            <Text style={{
+              fontSize: 20,
+              fontWeight: '600',
+              color: '#FECACA',
+              textAlign: 'center',
+            }}>{timer.selectedIssue}</Text>
+            {timer.selectedIssue === 'Sonstiges' && (
+              <TextInput
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.12)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(252, 165, 165, 0.4)',
+                  borderRadius: 10,
+                  padding: 12,
+                  color: '#FEF2F2',
+                  fontSize: 15,
+                  width: '100%',
+                  minHeight: 80,
+                  textAlignVertical: 'top',
+                }}
+                placeholder="Beschreibe die Störung..."
+                placeholderTextColor="rgba(252,165,165,0.5)"
+                value={timer.sonstigesText}
+                onChangeText={timer.setSonstigesText}
+                multiline
+              />
+            )}
+            <Text style={{
+              fontSize: 48,
+              fontWeight: '700',
+              color: '#FCA5A5',
+              letterSpacing: 2,
+              fontVariant: ['tabular-nums'],
+              marginTop: 4,
+            }}>{formatTime(timer.stoerElapsed)}</Text>
+            <TouchableOpacity
+              onPress={() => timer.handleStart(selectedFA, setFaSearchError, setCurrentView)}
+              disabled={timer.selectedIssue === 'Sonstiges' && !timer.sonstigesText?.trim()}
+              style={[{
+                marginTop: 24,
+                backgroundColor: 'rgba(220, 38, 38, 0.9)',
+                paddingVertical: 16,
+                paddingHorizontal: 48,
+                borderRadius: 14,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 10,
+                borderWidth: 1,
+                borderColor: 'rgba(252, 165, 165, 0.5)',
+              }, timer.selectedIssue === 'Sonstiges' && !timer.sonstigesText?.trim() && { opacity: 0.4 }]}
+            >
+              <MaterialIcons name="play-arrow" size={24} color="#FEF2F2" />
+              <Text style={{ fontSize: 18, fontWeight: '700', color: '#FEF2F2' }}>Störung beenden</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <ConfirmModal
         visible={confirmDialog.visible}
