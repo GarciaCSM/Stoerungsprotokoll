@@ -3,23 +3,27 @@ const { API_CONFIG } = require('./config');
 
 class Database {
   constructor() {
-    this.connectionString = API_CONFIG.ODBC_CONNECTION_STRING;
+    this.connectionString = API_CONFIG.ODBC_CONNECTION_STRING || '';
+    this.pool = null;
   }
 
-  async connect() {
-    try {
-      const connection = await odbc.connect(this.connectionString);
-      return connection;
-    } catch (error) {
-      console.error('Database connection error:', error.message);
-      throw error;
+  async getPool() {
+    if (!this.pool) {
+      this.pool = await odbc.pool({
+        connectionString: this.connectionString,
+        initialSize: 2,
+        incrementSize: 2,
+        maxSize: 10,
+      });
     }
+    return this.pool;
   }
 
   async executeQuery(sql, params = []) {
     let connection;
     try {
-      connection = await this.connect();
+      const pool = await this.getPool();
+      connection = await pool.connect();
       const result = await connection.query(sql, params);
       return result;
     } catch (error) {

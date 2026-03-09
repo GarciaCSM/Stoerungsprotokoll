@@ -14,7 +14,7 @@ class FAKoepfeController {
         SELECT TOP 20 
           FANr, 
           ArtikelNr, 
-          Artikelbezeichnung, 
+          CAST(Artikelbezeichnung AS NVARCHAR(500)) AS Artikelbezeichnung, 
           Verarbeitungsstatus
         FROM dbo.FAKoepfe
         WHERE 
@@ -51,7 +51,7 @@ class FAKoepfeController {
         SELECT 
           FANr, 
           ArtikelNr, 
-          Artikelbezeichnung, 
+          CAST(Artikelbezeichnung AS NVARCHAR(500)) AS Artikelbezeichnung, 
           Verarbeitungsstatus
         FROM dbo.FAKoepfe
         WHERE 

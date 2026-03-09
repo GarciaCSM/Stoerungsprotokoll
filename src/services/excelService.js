@@ -2,6 +2,18 @@ import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import XLSX from 'xlsx';
 import { API_ENDPOINTS } from '../config/apiConfig';
+import { fixEncoding } from '../utils/helper';
+
+// Apply fixEncoding to every string value in an array of rows (object or array form)
+const fixRowsEncoding = (arr) => {
+  if (!Array.isArray(arr)) return arr;
+  return arr.map(row => {
+    if (Array.isArray(row)) return row.map(v => fixEncoding(v));
+    const out = {};
+    Object.entries(row).forEach(([k, v]) => { out[fixEncoding(k)] = fixEncoding(v); });
+    return out;
+  });
+};
 
 // Parse .xlsx from a DocumentPicker URI and return array of row objects for the specified sheetName
 export async function pickAndParseSheet(sheetName = 'SOLL-STUNDEN') {
@@ -10,14 +22,15 @@ export async function pickAndParseSheet(sheetName = 'SOLL-STUNDEN') {
   const uri = res.uri;
 
   // read file as base64 (SheetJS accepts base64)
+  // codepage 1252 = Windows-1252 (Western Europe / German) – fixes umlauts in older .xlsx/.xls files
   const b64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-  const workbook = XLSX.read(b64, { type: 'base64' });
+  const workbook = XLSX.read(b64, { type: 'base64', codepage: 1252 });
 
   const sheetNames = workbook.SheetNames;
   const targetSheetName = sheetNames.find(n => n.toLowerCase() === sheetName.toLowerCase()) || sheetNames[0];
   const sheet = workbook.Sheets[targetSheetName];
-  const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
-  const rowsArr = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+  const rows    = fixRowsEncoding(XLSX.utils.sheet_to_json(sheet, { defval: null }));
+  const rowsArr = fixRowsEncoding(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null }));
   return { cancelled: false, rows, rowsArr };
 }
 

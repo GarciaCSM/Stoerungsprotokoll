@@ -141,14 +141,18 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     };
 
     try {
-      await apiFetch('/stoerungen.php', {
+      const res = await apiFetch('/stoerungen.php', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-    } catch (e) {
-      if (e.name !== 'AbortError') {
-        console.warn('[useDbSync] Störung-Sync fehlgeschlagen:', e.message);
+      if (res.ok) {
+        // success
+      } else {
+        const text = await res.text().catch(() => '');
+        console.warn('[useDbSync] Störung-Sync HTTP-Fehler:', res.status, text);
       }
+    } catch (e) {
+      if (e.name !== 'AbortError') console.warn('[useDbSync] Störung-Sync fehlgeschlagen:', e.message);
     }
   }, [shiftData, selectedFA]);
 

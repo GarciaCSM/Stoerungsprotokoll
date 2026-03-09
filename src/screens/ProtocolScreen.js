@@ -113,7 +113,11 @@ const ProtocolScreen = () => {
   // saveStoerLog mit DB-Sync wrappen – wird an useProductionTimer übergeben
   const saveStoerLogWithSync = async (args) => {
     await saveStoerLog(args);
-    saveStoerLogWithSyncRef.current?.(args);
+    try {
+      await saveStoerLogWithSyncRef.current?.(args);
+    } catch (e) {
+      console.warn('[ProtocolScreen] DB-Sync für Störung fehlgeschlagen:', e.message);
+    }
   };
   const saveStoerLogWithSyncRef = useRef(null);
 
