@@ -12,7 +12,7 @@ const SYNC_INTERVAL_MS = 1_000; // alle 1 Sekunde
  *   // Störung direkt nach saveStoerLog übertragen:
  *   await dbSync.syncStoerung({ issue, startTime, endTime, durationSeconds, notes });
  */
-export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue, sollPerHour, sollAktuell }) {
+export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue, sollPerHour, sollAktuell, stoerTotalSeconds }) {
   const syncIntervalRef = useRef(null);
   const lastSyncedRef   = useRef(null); // verhindert doppelte Syncs bei identischem Zustand
   const lastIstRef      = useRef(0);   // zuletzt erfolgreich in die DB geschriebener IST-Wert
@@ -46,6 +46,11 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       return new Date(Number(epochMs)).toISOString().slice(0, 19).replace('T', ' ');
     };
 
+    // calculate ongoing störung duration (in seconds) in addition to stored logs
+    const activeStoerSeconds = timer.stoerRunning && timer.stoerStart
+      ? Math.floor((Date.now() - timer.stoerStart) / 1000)
+      : 0;
+
     return {
       linie:                shiftData.selectedLine,
       schicht:              shiftData.selectedShift,
@@ -65,8 +70,11 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       pause_running:        timer.pauseRunning ? 1 : 0,
       pause_start_time:     null, // nicht von außen zugänglich, wird beim Reload ignoriert
       pause_total_seconds:  timer.totalPauseSeconds    || 0,
-      // netto = brutto minus Pausen (Störungen stehen separat in der stoerungen-Tabelle)
-      netto_seconds:        Math.max(0, (timer.elapsed || 0) - (timer.totalPauseSeconds || 0)),
+      // netto = brutto minus pauses minus both logged + running störungen
+      netto_seconds:        Math.max(0,
+                                (timer.elapsed || 0)
+                                - (timer.totalPauseSeconds || 0)
+                                - ((stoerTotalSeconds || 0) + activeStoerSeconds)),
 
       stoerung_running:     timer.stoerRunning ? 1 : 0,
       stoerung_start_time:  toDatetime(timer.stoerStart),

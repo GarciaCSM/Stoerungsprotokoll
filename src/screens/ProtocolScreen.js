@@ -152,9 +152,13 @@ const ProtocolScreen = () => {
   // aktuelle SOLL‑Zahl basierend auf Laufzeit (rounded down)
   const aktuelleSoll = _soll > 0 ? Math.floor((_soll / 3600) * (timer.elapsed || 0)) : 0;
 
+  // Summe aller abgeschlossenen Störungen (muss vor useDbSync stehen)
+  const stoerTotalSeconds = localLogs.reduce((s, l) => s + (l.durationSeconds || 0), 0);
+
   // DB‑Sync hook (after we know derived soll values)
   const dbSync = useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue,
-                               sollPerHour: _soll, sollAktuell: aktuelleSoll });
+                               sollPerHour: _soll, sollAktuell: aktuelleSoll,
+                               stoerTotalSeconds });
 
   // Ref mit syncStoerung befüllen sobald dbSync bereit
   useEffect(() => {
@@ -221,8 +225,6 @@ const ProtocolScreen = () => {
     : timer.running
     ? { color: THEME.colors.dark.success, text: 'Produktion' }
     : { color: THEME.colors.dark.brutto,  text: 'Bereit'     };
-
-  const stoerTotalSeconds = localLogs.reduce((s, l) => s + (l.durationSeconds || 0), 0);
 
   //  Load logs + restore pause totals on selection change (also on FA change)
   useEffect(() => {

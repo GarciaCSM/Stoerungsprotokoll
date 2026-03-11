@@ -130,7 +130,9 @@ export default function SollIstZeitRow({
                 <Text style={[s.zeitPairValue, { color: THEME.colors.dark.success }]}>
                   {selectedFA
                     ? formatTime(Math.max(0,
-                        timer.elapsed - (_pauseSec + (timer.pauseRunning ? timer.pauseElapsed : 0))
+                        timer.elapsed
+                        - (_pauseSec + (timer.pauseRunning ? timer.pauseElapsed : 0))
+                        - stoerTotalSeconds  // subtract both pauses and störung time for netto
                       ))
                     : '--:--'}
                 </Text>
