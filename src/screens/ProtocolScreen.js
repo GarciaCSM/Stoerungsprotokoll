@@ -130,13 +130,6 @@ const ProtocolScreen = () => {
     handleImportSoll, handleRefreshSoll,
   } = useSollData({ selectedFA, shiftData });
 
-  const dbSync = useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue });
-
-  // Ref mit syncStoerung befüllen sobald dbSync bereit
-  useEffect(() => {
-    saveStoerLogWithSyncRef.current = dbSync.syncStoerung;
-  }, [dbSync.syncStoerung]);
-
   // Hilfsfunktion: Session aus DB auf Timer + FA anwenden
   const applyDbSession = async (session) => {
     if (!session) return;
@@ -156,6 +149,17 @@ const ProtocolScreen = () => {
   const _ist      = Number(istValue)    || 0;
   const _pauseSec = Number(timer.totalPauseSeconds) || 0;
   const sollPerMin = _soll > 0 ? Math.round((_soll / 60) * 100) / 100 : 0;
+  // aktuelle SOLL‑Zahl basierend auf Laufzeit (rounded down)
+  const aktuelleSoll = _soll > 0 ? Math.floor((_soll / 3600) * (timer.elapsed || 0)) : 0;
+
+  // DB‑Sync hook (after we know derived soll values)
+  const dbSync = useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue,
+                               sollPerHour: _soll, sollAktuell: aktuelleSoll });
+
+  // Ref mit syncStoerung befüllen sobald dbSync bereit
+  useEffect(() => {
+    saveStoerLogWithSyncRef.current = dbSync.syncStoerung;
+  }, [dbSync.syncStoerung]);
 
   // Frühschicht: wenn Produktion zwischen 6:00 und 6:30 gestartet wurde,
   // rechne SOLL ab 6:00 (nicht ab tatsächlichem Start-Druck)

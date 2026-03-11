@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS stprot_produktion_session (
     stoerung_aktiv_notiz    VARCHAR(500)    DEFAULT NULL,
     -- IST-Wert (letzter bekannter Stückzahl-Stand beim Sync)
     ist_wert                INT             DEFAULT NULL,
+    -- SOLL‑Werte (pro Stunde und aktuell berechneter Erwartungswert)
+    soll_pro_stunde         INT             DEFAULT NULL,
+    soll_aktuell            INT             DEFAULT NULL,
     -- Zeitstempel
     erstellt_am             DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     aktualisiert_am         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -127,6 +130,7 @@ CREATE TABLE IF NOT EXISTS stprot_schicht_abschluss (
 
     ist_menge               INT             DEFAULT NULL,
     soll_pro_stunde         INT             DEFAULT NULL,
+    soll_aktuell            INT             DEFAULT NULL,
     anzahl_mitarbeiter      INT             DEFAULT NULL,
 
     abgeschlossen_am        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -158,6 +162,8 @@ SELECT
     s.stoerung_running,
     s.stoerung_aktiv_typ,
     s.aktualisiert_am,
+    s.soll_pro_stunde,
+    s.soll_aktuell,
     IFNULL(st.anzahl_stoerungen, 0)     AS anzahl_stoerungen_heute,
     IFNULL(st.stoerung_sekunden, 0)     AS stoerung_sekunden_heute
 FROM stprot_produktion_session s

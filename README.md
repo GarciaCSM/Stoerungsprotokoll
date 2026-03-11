@@ -70,6 +70,7 @@ die Session + Störungen aus der Datenbank.
 - ✅ Timer läuft auch bei geschlossener App
 - ✅ Hybrid‑Sync: lokale und MariaDB-Session (Timer, FA, Pause, IST)
 - ✅ SOLL‑Werte per Excel oder Server laden, pro FA
+- ✅ SOLL‑Werte (pro Stunde und laufender Soll) werden jetzt auch in der Session‑DB mitgespeichert
 - ✅ IST‑Zähler im Tablet + DB (über `ist.php`) – bleibt beim Neustart erhalten
 - ✅ Per‑Schicht Timer‑State & FA, mit Schichtwechsel‑Bestätigung
 - ✅ FA-Nummern-Suche in metaARGON DB (Status 30, 35, 36)
@@ -90,6 +91,9 @@ die Session + Störungen aus der Datenbank.
 
 **SOLL‑Daten:**
 Import per Excel‑Upload im Frontend oder via Node‑Script `npm run server` → PATCH `/api/soll-hours`.
+
+**DB‑Erweiterung:**
+Die Tabelle `stprot_produktion_session` enthält nun `soll_pro_stunde` und `soll_aktuell`; diese Werte werden bei jedem Sync im Feld `session.php` gespeichert und können von anderen Programmen abgefragt. Beim Schichtende landen sie zusätzlich in `stprot_schicht_abschluss`.
 
 **IST‑Test:**
 Lokaler Node: `npm run test:ist` oder DB‑Variante `npm run test:ist-db`.

@@ -1,10 +1,10 @@
 import { useEffect, useRef, useCallback } from 'react';
 
 const API_BASE = 'https://cosmetic-service.com/php-api/produktion';
-const SYNC_INTERVAL_MS = 10_000; // alle 10 Sekunden
+const SYNC_INTERVAL_MS = 1_000; // alle 1 Sekunde
 
 /**
- * Synct den laufenden Timer-Zustand alle 10s in die IONOS MariaDB.
+ * Synct den laufenden Timer-Zustand jede Sekunde in die IONOS MariaDB.
  * Störungen werden sofort nach Abschluss übertragen.
  *
  * Verwendung in ProtocolScreen.js:
@@ -12,7 +12,7 @@ const SYNC_INTERVAL_MS = 10_000; // alle 10 Sekunden
  *   // Störung direkt nach saveStoerLog übertragen:
  *   await dbSync.syncStoerung({ issue, startTime, endTime, durationSeconds, notes });
  */
-export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue }) {
+export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue, sollPerHour, sollAktuell }) {
   const syncIntervalRef = useRef(null);
   const lastSyncedRef   = useRef(null); // verhindert doppelte Syncs bei identischem Zustand
   const lastIstRef      = useRef(0);   // zuletzt erfolgreich in die DB geschriebener IST-Wert
@@ -73,6 +73,11 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       stoerung_aktiv_typ:   timer.selectedIssue        || null,
       stoerung_aktiv_notiz: timer.sonstigesText        || null,
 
+      // optional soll information – consumer can pass per-hour and calculated
+      // current expectation value (e.g. sollPerHour*elapsed/3600)
+      soll_pro_stunde:      typeof sollPerHour === 'number' ? sollPerHour : null,
+      soll_aktuell:         typeof sollAktuell === 'number' ? sollAktuell : null,
+
       // only send IST when we have a positive number and it has increased since
       // the last sync. this prevents a stale tablet value from rolling the
       // value backwards in the database (the server also guards with
@@ -96,6 +101,9 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     if (!timer.running && (timer.elapsed || 0) === 0) return;
     const payload = buildSessionPayload();
     if (!payload) return;
+
+    // debug payload
+    console.log('[useDbSync] payload', payload);
 
     // Nur senden wenn sich etwas geändert hat
     const snapshot = JSON.stringify(payload);
@@ -208,10 +216,35 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
 
     try {
       const sessionRes = await apiFetch(`/session.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}&datum=${today}`);
-      const session = sessionRes.status === 200 ? await sessionRes.json() : null;
+      let session = null;
+      if (sessionRes.status === 200) {
+        try {
+          session = await sessionRes.json();
+        } catch (e) {
+          let text = await sessionRes.text().catch(() => '<unreadable>');
+          if (text.trim().length === 0) {
+            // empty body is harmless, treat as null
+            session = null;
+          } else {
+            console.warn('[useDbSync] session.php returned non-json:', sessionRes.status, text);
+          }
+        }
+      }
 
       const stoerRes = await apiFetch(`/stoerungen.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}&datum=${today}`);
-      const stoerungen = stoerRes.status === 200 ? await stoerRes.json() : null;
+      let stoerungen = null;
+      if (stoerRes.status === 200) {
+        try {
+          stoerungen = await stoerRes.json();
+        } catch (e) {
+          let text = await stoerRes.text().catch(() => '<unreadable>');
+          if (text.trim().length === 0) {
+            stoerungen = null;
+          } else {
+            console.warn('[useDbSync] stoerungen.php returned non-json:', stoerRes.status, text);
+          }
+        }
+      }
 
       return { session, stoerungen };
     } catch (e) {

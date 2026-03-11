@@ -135,6 +135,9 @@ async function run() {
       linienfuehrer:   'Test User',
       elapsed_seconds: 42,
       running:         0,
+      // send some dummy SOLL values to exercise new columns
+      soll_pro_stunde: 100,
+      soll_aktuell:    10,
     });
     if (res.status === 200 && res.body?.success) {
       sessionId = res.body.session_id;
@@ -162,6 +165,8 @@ async function run() {
       console.log(`       linienfuehrer:    ${s.linienfuehrer}`);
       console.log(`       elapsed_seconds:  ${s.elapsed_seconds}`);
       console.log(`       running:          ${s.running}`);
+      console.log(`       soll_pro_stunde:  ${s.soll_pro_stunde}`);
+      console.log(`       soll_aktuell:     ${s.soll_aktuell}`);
       console.log(`       aktualisiert_am:  ${s.aktualisiert_am}`);
     } else {
       err(`HTTP ${res.status} – ${res.body?.error}`);

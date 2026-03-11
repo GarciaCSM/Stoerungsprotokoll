@@ -129,7 +129,9 @@ export default function SollIstZeitRow({
                 </View>
                 <Text style={[s.zeitPairValue, { color: THEME.colors.dark.success }]}>
                   {selectedFA
-                    ? formatTime(Math.max(0, timer.elapsed - stoerTotalSeconds))
+                    ? formatTime(Math.max(0,
+                        timer.elapsed - (_pauseSec + (timer.pauseRunning ? timer.pauseElapsed : 0))
+                      ))
                     : '--:--'}
                 </Text>
               </View>
