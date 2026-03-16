@@ -1,5 +1,8 @@
 import { registerRootComponent } from 'expo';
 
+// Hintergrund-Task muss vor dem App-Start importiert/definiert werden
+import './src/tasks/backgroundSyncTask';
+
 import App from './App';
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);

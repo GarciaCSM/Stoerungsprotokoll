@@ -1,4 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PAYLOAD_STORAGE_KEY } from '../../../tasks/backgroundSyncTask';
 
 const API_BASE = 'https://cosmetic-service.com/php-api/produktion';
 const SYNC_INTERVAL_MS = 1_000; // alle 1 Sekunde
@@ -131,6 +133,10 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
         console.warn('[useDbSync] Session-Sync fehlgeschlagen:', e.message);
       }
     }
+    // Payload in AsyncStorage speichern → Background-Task kann ihn im Hintergrund senden
+    try {
+      await AsyncStorage.setItem(PAYLOAD_STORAGE_KEY, snapshot);
+    } catch (_) { /* ignorieren */ }
   }, [selectionConfirmed, buildSessionPayload]);
 
   // ── Störung sofort nach Abschluss übertragen ──────────────────────────────
