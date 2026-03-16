@@ -53,7 +53,7 @@ export function useSollData({ selectedFA, shiftData }) {
     }
   }, [selectedFA, sollMap, arbeitMap]);
 
-  // ─── Poll IST value – FA-spezifisch aus stprot_fa_ist ───────────────────────────────
+  // ─── Poll IST value – direkt aus Session-IST (ist.php) ───────────────────
   useEffect(() => {
     if (!selectedFA?.FANr) {
       setIstValue(0);
@@ -64,12 +64,10 @@ export function useSollData({ selectedFA, shiftData }) {
     const datum   = new Date().toISOString().slice(0, 10);
     const linie   = shiftData?.selectedLine;
     const schicht = shiftData?.selectedShift;
-    const faNo    = selectedFA.FANr;
-
     const poll = async () => {
       try {
         if (!linie || !schicht) { if (mounted) setIstValue(0); return; }
-        const v = await FAService.getFaIst(faNo, linie, schicht, datum);
+        const v = await FAService.getDbIst(linie, schicht, datum);
         if (mounted) setIstValue(v);
       } catch (_) {}
     };
