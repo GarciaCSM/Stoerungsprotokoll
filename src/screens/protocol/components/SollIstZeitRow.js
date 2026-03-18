@@ -1,8 +1,10 @@
-import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, TouchableOpacity, Modal, ScrollView } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import s from '../../../styles/ProtocolScreenStyles';
 import { THEME } from '../../../styles/globalStyles';
+
+const TAKT_BRUTTO_OPTIONS = Array.from({ length: 16 }, (_, i) => 10 + i * 5);
 
 export default function SollIstZeitRow({
   timer,
@@ -11,11 +13,27 @@ export default function SollIstZeitRow({
   _soll, _ist, _pauseSec,
   expectedIstRounded, istDiff, istStatus, istColor,
   stoerTotalSeconds,
+  taktBrutto,
+  onSelectTaktBrutto,
   isImportingSoll, isFetchingSoll,
   handleImportSoll, handleRefreshSoll,
   formatTime,
 }) {
+  const [showTaktDropdown, setShowTaktDropdown] = useState(false);
+  const nettoSeconds = Math.max(
+    0,
+    (timer.elapsed || 0)
+      - ((_pauseSec || 0) + (timer.pauseRunning ? timer.pauseElapsed : 0))
+      - (stoerTotalSeconds || 0)
+  );
+  const istHoursDecimal = nettoSeconds > 0 ? nettoSeconds / 3600 : 0;
+  const taktNetto = _ist > 0 && istHoursDecimal > 0
+    ? (_ist / istHoursDecimal) / 60
+    : 0;
+  const bruttoValue = useMemo(() => Number(taktBrutto) || 10, [taktBrutto]);
+
   return (
+    <>
     <View style={s.sollIstZeitRow}>
 
       {/* SOLL + IST column */}
@@ -113,6 +131,34 @@ export default function SollIstZeitRow({
             </View>
           </View>
 
+          {/* TAKT NETTO / TAKT BRUTTO */}
+          <View style={s.zeitPairRow}>
+            <View style={s.zeitPairItem}>
+              <View style={s.zeitInnerBox}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <MaterialIcons name="speed" size={13} color={THEME.colors.dark.success} style={{ marginRight: 4 }} />
+                  <Text style={[s.zeitPairLabel, { color: THEME.colors.dark.success }]}>TAKT NETTO</Text>
+                </View>
+                <Text style={[s.zeitPairValue, { color: THEME.colors.dark.success }]}>
+                  {taktNetto > 0 ? `${taktNetto.toFixed(2)} Stk/min` : '--'}
+                </Text>
+              </View>
+            </View>
+            <View style={s.zeitPairItem}>
+              <View style={s.zeitInnerBox}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <MaterialIcons name="tune" size={13} color={THEME.colors.dark.info} style={{ marginRight: 4 }} />
+                  <Text style={[s.zeitPairLabel, { color: THEME.colors.dark.info }]}>TAKT BRUTTO</Text>
+                </View>
+                <TouchableOpacity style={s.taktValueRow} activeOpacity={0.75} onPress={() => setShowTaktDropdown(true)}>
+                  <Text style={s.taktValue}>{String(bruttoValue)}</Text>
+                  <Text style={s.taktInputUnit}>Stk/min</Text>
+                  <MaterialIcons name="arrow-drop-down" size={18} color={THEME.colors.dark.info} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
           {/* BRUTTO / NETTO */}
           <View style={s.zeitPairRow}>
             <View style={s.zeitPairItem}>
@@ -169,5 +215,41 @@ export default function SollIstZeitRow({
         </View>
       </View>
     </View>
+    <Modal
+      visible={showTaktDropdown}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowTaktDropdown(false)}
+    >
+      <TouchableOpacity
+        activeOpacity={1}
+        style={s.dropdownBackdrop}
+        onPress={() => setShowTaktDropdown(false)}
+      >
+        <View style={s.dropdownCard}>
+          <Text style={s.dropdownTitle}>TAKT BRUTTO</Text>
+          <ScrollView style={s.dropdownList}>
+            {TAKT_BRUTTO_OPTIONS.map((value) => {
+              const selected = value === bruttoValue;
+              return (
+                <TouchableOpacity
+                  key={value}
+                  style={[s.dropdownItem, selected && s.dropdownItemSelected]}
+                  onPress={() => {
+                    onSelectTaktBrutto(value);
+                    setShowTaktDropdown(false);
+                  }}
+                >
+                  <Text style={[s.dropdownItemText, selected && s.dropdownItemTextSelected]}>
+                    {value}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+    </>
   );
 }

@@ -1,7 +1,8 @@
 // API Configuration
 // USB-Entwicklung (adb reverse): USE_LOCALHOST = true → localhost
 // WLAN / Tablet-Produktion:      USE_LOCALHOST = false → LAN-IP
-const USE_LOCALHOST = false; // true nur für USB-Entwicklung am PC
+// Für lokale Tests (z.B. `npm run test:pi-server`) sollte hier true stehen
+const USE_LOCALHOST = true; // true nur für USB-Entwicklung am PC
 
 export const API_BASE_URL =
   __DEV__ && USE_LOCALHOST

@@ -61,6 +61,7 @@ const ProtocolScreen = () => {
   const [faSearchResults, setFaSearchResults]   = useState([]);
   const [isSearching, setIsSearching]           = useState(false);
   const [selectedFA, setSelectedFA]             = useState(null);
+  const [taktBrutto, setTaktBrutto]             = useState(10);
   const faInitialized = useRef(false);
   // Wenn true: selectionConfirmed wurde für die GLEICHE Linie/Schicht neu gesetzt
   // → useEffect darf den laufenden Timer NICHT anfassen
@@ -621,6 +622,8 @@ const ProtocolScreen = () => {
             expectedIstRounded={displayExpectedIst}
             istDiff={istDiff} istStatus={istStatus} istColor={istColor}
             stoerTotalSeconds={stoerTotalSeconds}
+            taktBrutto={taktBrutto}
+            onSelectTaktBrutto={setTaktBrutto}
             isImportingSoll={isImportingSoll} isFetchingSoll={isFetchingSoll}
             handleImportSoll={handleImportSoll} handleRefreshSoll={handleRefreshSoll}
             formatTime={formatTime}
