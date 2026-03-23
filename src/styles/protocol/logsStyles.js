@@ -230,7 +230,6 @@ export default StyleSheet.create({
     backgroundColor: COLORS.card,
     borderRadius: 12,
     padding: 20,
-    marginHorizontal: 'auto',
     marginBottom: 20,
     borderWidth: 1,
     borderColor: COLORS.border,

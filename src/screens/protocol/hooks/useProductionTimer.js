@@ -20,6 +20,7 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
   const [showStartOnly, setShowStartOnly] = useState(false);
   const intervalRef = useRef(null);
   const mainTimerStartTime = useRef(null);
+  const productionStartTime = useRef(null); // immutable root start time for session_run_key
   const runningRef = useRef(false); // Ref-Spiegel von `running` für Closures (z.B. AppState)
   const appStateRef = useRef(AppState.currentState);
 
@@ -69,6 +70,9 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
     if (running) {
       if (!mainTimerStartTime.current) {
         mainTimerStartTime.current = Date.now() - elapsed * 1000;
+      }
+      if (!productionStartTime.current) {
+        productionStartTime.current = mainTimerStartTime.current;
       }
       if (!intervalRef.current) {
         intervalRef.current = setInterval(() => {
@@ -135,6 +139,7 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
         await AsyncStorage.setItem('timer_state', JSON.stringify({
           elapsed, running, activeButton, selectedIssue, showStartOnly,
           startTime: mainTimerStartTime.current,
+          productionStartTime: productionStartTime.current,
           stoerStart, stoerRunning,
           pauseStart, pauseRunning, totalPauseSeconds,
           pauseLine: shiftData.selectedLine, pauseShift: shiftData.selectedShift,
@@ -175,10 +180,19 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
           setRunning(true);
           // Wenn Pause aktiv war: activeButton muss 'pause' sein, nicht 'start'
           setActiveButton(ts.pauseRunning ? 'pause' : (ts.activeButton || 'start'));
+
+          const persistedProductionStart = Number(ts.productionStartTime || ts.startTime || 0);
+          if (!isNaN(persistedProductionStart) && persistedProductionStart > 0) {
+            productionStartTime.current = persistedProductionStart;
+          }
         } else {
           setElapsed(Math.max(0, ts.elapsed || 0));
           setRunning(false);
           setActiveButton(ts.pauseRunning ? 'pause' : (ts.activeButton || null));
+          const persistedProductionStart = Number(ts.productionStartTime || ts.startTime || 0);
+          if (!isNaN(persistedProductionStart) && persistedProductionStart > 0) {
+            productionStartTime.current = persistedProductionStart;
+          }
         }
 
         if (ts.selectedIssue) { setSelectedIssue(ts.selectedIssue); setShowStartOnly(true); }
@@ -233,6 +247,11 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
           }
           setRunning(true);
           setActiveButton(ts.activeButton || 'start');
+
+          const persistedProductionStart = Number(ts.productionStartTime || ts.startTime || 0);
+          if (!isNaN(persistedProductionStart) && persistedProductionStart > 0) {
+            productionStartTime.current = persistedProductionStart;
+          }
         }
 
         const perKey = getPauseKey(shiftData.selectedLine, shiftData.selectedShift);
@@ -371,6 +390,7 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
     setSelectedIssue(null);
     setShowStartOnly(false);
     mainTimerStartTime.current = null;
+    productionStartTime.current = null;
     try { await AsyncStorage.removeItem('timer_state'); } catch (e) {}
   };
 
@@ -385,14 +405,19 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
         const ms = parseDatetimeToMs(session.timer_start_time);
         if (ms) {
           mainTimerStartTime.current = ms;
+          if (!productionStartTime.current) productionStartTime.current = ms;
           // Elapsed immer live aus dem absoluten Startzeitpunkt berechnen –
           // so ist der Wert auf jedem Gerät sekundengenau, egal wie alt der DB-Eintrag ist.
           setElapsed(Math.max(0, Math.floor((Date.now() - ms) / 1000)));
         } else {
           mainTimerStartTime.current = Date.now() - ((session.elapsed_seconds || 0) * 1000);
+          if (!productionStartTime.current) productionStartTime.current = mainTimerStartTime.current;
           setElapsed(Number(session.elapsed_seconds || 0));
         }
       } else if (session.elapsed_seconds != null) {
+        if (!productionStartTime.current && session.elapsed_seconds != null) {
+          productionStartTime.current = Date.now() - ((session.elapsed_seconds || 0) * 1000);
+        }
         mainTimerStartTime.current = Date.now() - (Number(session.elapsed_seconds) * 1000);
         setElapsed(Number(session.elapsed_seconds || 0));
       }
@@ -542,6 +567,7 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
     stoerStart, stoerRunning, stoerElapsed,
     pauseRunning, pauseElapsed, totalPauseSeconds,
     mainTimerStartTime,
+    productionStartTime,
     // actions
     handleStart, handlePause, handleStörungClick,
     handleIssueSelect, handleCancelStoer, resetTimer,

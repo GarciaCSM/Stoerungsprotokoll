@@ -11,7 +11,7 @@ class FAKoepfeController {
 
     try {
       const sql = `
-        SELECT TOP 20 
+        SELECT TOP 40 
           FANr, 
           ArtikelNr, 
           CAST(Artikelbezeichnung AS NVARCHAR(500)) AS Artikelbezeichnung, 
@@ -19,12 +19,16 @@ class FAKoepfeController {
         FROM dbo.FAKoepfe
         WHERE 
           Verarbeitungsstatus IN (30, 35, 36)
-          AND CAST(FANr AS VARCHAR) LIKE ?
+          AND (
+            CAST(FANr AS VARCHAR(50)) LIKE ?
+            OR FANr = ?
+          )
         ORDER BY FANr DESC
       `;
 
       const searchPattern = `%${query}%`;
-      const result = await database.executeQuery(sql, [searchPattern]);
+      const exactFanr = query.replace(/\s+/g, '');
+      const result = await database.executeQuery(sql, [searchPattern, exactFanr]);
 
       res.json({ 
         success: true,

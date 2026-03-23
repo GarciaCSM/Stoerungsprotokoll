@@ -121,22 +121,6 @@ class FAService {
       return 0;
     }
   }
-  /**
-   * IST-Wert für eine bestimmte FA aus stprot_fa_ist lesen.
-   * Gibt 0 zurück wenn keine Daten gefunden.
-   */
-  async getFaIst(faNo, linie, schicht, datum) {
-    try {
-      const endpointUrl = API_ENDPOINTS.FA_IST(faNo, linie, schicht, datum);
-      const resp = await fetch(endpointUrl);
-      if (!resp.ok) return 0;
-      const j = await resp.json();
-      return typeof j.ist === 'number' ? j.ist : Number(j.ist) || 0;
-    } catch (err) {
-      console.warn('[getFaIst] failed:', err.message || err);
-      return 0;
-    }
-  }
 }
 
 export default new FAService();

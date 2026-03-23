@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS stprot_produktion_session (
     -- Identifikator (zusammen UNIQUE)
     linie                   VARCHAR(50)     NOT NULL,
     schicht                 VARCHAR(50)     NOT NULL,
+    bereich                 VARCHAR(100)    DEFAULT NULL,
     datum                   DATE            NOT NULL,
+    session_run_key         VARCHAR(32)     NOT NULL,
 
     -- Zuordnung
     linienfuehrer           VARCHAR(100)    DEFAULT NULL,
@@ -50,7 +52,7 @@ CREATE TABLE IF NOT EXISTS stprot_produktion_session (
     erstellt_am             DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     aktualisiert_am         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    UNIQUE KEY UQ_stprot_session (linie, schicht, datum)
+    UNIQUE KEY UQ_stprot_session (linie, schicht, datum, session_run_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
@@ -152,6 +154,7 @@ SELECT
     s.id,
     s.linie,
     s.schicht,
+    s.bereich,
     s.datum,
     s.linienfuehrer,
     s.fa_nr,

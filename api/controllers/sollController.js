@@ -2,6 +2,15 @@ const fs = require('fs');
 const path = require('path');
 const XLSX = require('xlsx');
 
+let fetchFn = global.fetch;
+if (!fetchFn) {
+  try {
+    fetchFn = require('undici').fetch;
+  } catch (_e) {
+    fetchFn = null;
+  }
+}
+
 // Try several candidate filenames/extensions inside configured folder
 function findSollFile(baseDir) {
   const candidates = [
@@ -19,6 +28,20 @@ function findSollFile(baseDir) {
   // try baseDir directly if it already points to a file
   if (fs.existsSync(baseDir) && fs.lstatSync(baseDir).isFile()) return baseDir;
   return null;
+}
+
+async function loadWorkbookFromSharepoint(url) {
+  if (!fetchFn) {
+    throw new Error('Kein Fetch verfügbar. Installiere Node 18+ oder nutze undici.');
+  }
+
+  const resp = await fetchFn(url);
+  if (!resp.ok) {
+    throw new Error(`SharePoint-URL antwortet mit HTTP ${resp.status}`);
+  }
+  const arrayBuffer = await resp.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  return XLSX.read(buffer, { type: 'buffer', codepage: 1252 });
 }
 
 function buildSollMapFromRows(rows) {
@@ -72,10 +95,20 @@ class SollController {
         base = path.join(profile, 'Cosmetic Service GmbH', 'SCM - Dokumente', 'Auftragseingang');
       }
 
-      const filePath = findSollFile(base);
-      if (!filePath) return res.status(404).json({ success: false, error: 'SOLL-Datei nicht gefunden', attemptedPath: base });
+      const sharepointUrl = process.env.SOLL_SHAREPOINT_URL || null;
+      let workbook;
+      let source;
 
-      const workbook = XLSX.readFile(filePath);
+      if (sharepointUrl) {
+        workbook = await loadWorkbookFromSharepoint(sharepointUrl);
+        source = `sharepoint:${sharepointUrl}`;
+      } else {
+        const filePath = findSollFile(base);
+        if (!filePath) return res.status(404).json({ success: false, error: 'SOLL-Datei nicht gefunden', attemptedPath: base });
+        workbook = XLSX.readFile(filePath, { codepage: 1252 });
+        source = filePath;
+      }
+
       const sheetName = workbook.SheetNames.find(n => n.toLowerCase() === 'soll-stunden') || workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
 
@@ -104,7 +137,7 @@ class SollController {
         });
       }
 
-      res.json({ success: true, source: filePath, mapping: map, arbeitMapping: arbeitMap, count: Object.keys(map).length });
+      res.json({ success: true, source, mapping: map, arbeitMapping: arbeitMap, count: Object.keys(map).length });
     } catch (err) {
       console.error('Failed to read SOLL file:', err);
       res.status(500).json({ success: false, error: err.message || String(err) });

@@ -30,10 +30,7 @@ export const API_ENDPOINTS = {
   TEST_IST:  `${API_BASE_URL}/test/ist`,
   // IST direkt aus IONOS-DB (kein lokaler Node-Server nötig)
   DB_IST: (linie, schicht, datum) =>
-    `${IONOS_API_BASE}/ist.php?linie=${encodeURIComponent(linie)}&schicht=${encodeURIComponent(schicht)}&datum=${datum}`,
-  // IST pro FA (fa-ist.php)
-  FA_IST: (faNo, linie, schicht, datum) =>
-    `${IONOS_API_BASE}/fa-ist.php?fa_nr=${encodeURIComponent(faNo)}&linie=${encodeURIComponent(linie)}&schicht=${encodeURIComponent(schicht)}&datum=${datum}`,
+    `${IONOS_API_BASE}/ist.php?linie=${encodeURIComponent(linie)}&schicht=${encodeURIComponent(schicht)}&datum=${datum}`
 };
 
 // API Error Messages
