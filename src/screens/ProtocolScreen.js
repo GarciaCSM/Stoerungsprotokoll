@@ -166,49 +166,20 @@ const ProtocolScreen = () => {
     saveStoerLogWithSyncRef.current = dbSync.syncStoerung;
   }, [dbSync.syncStoerung]);
 
-  // Frühschicht: wenn Produktion zwischen 6:00 und 6:30 gestartet wurde,
-  // rechne SOLL ab 6:00 (nicht ab tatsächlichem Start-Druck)
-  const getSollGrossElapsed = () => {
-    if (shiftData.selectedShift !== 'Frühschicht') return timer.elapsed;
-    const startTs = timer.mainTimerStartTime.current;
-    if (!startTs) return timer.elapsed;
-    const startDate = new Date(startTs);
-    const snap = new Date(startDate);
-    snap.setHours(6, 0, 0, 0);
-    const diffMin = (startDate - snap) / 60000;
-    if (diffMin < 0 || diffMin > 30) return timer.elapsed;
-    // Offset in Sekunden zwischen 6:00 und tatsächlichem Start dazuaddieren
-    return timer.elapsed + diffMin * 60;
-  };
-  // SOLL basiert auf Brutto-Zeit (kein _pauseSec-Abzug → kein Rückwärtssprung beim Weiter-Drücken)
-  const netSec = getSollGrossElapsed();
-  const expectedIst        = _soll > 0 ? (netSec / 3600) * _soll : 0;
+  // SOLL basiert auf Bruttoproduktionszeit (Netto + Störungszeit). Pausezeit abziehen.
+  // Das Störungsprotokoll-Backend zählt Störungen in den Bruttotimer rein.  
+  const bruttoForSollSec = Math.max(0, (timer.elapsed || 0) + (timer.stoerRunning ? timer.stoerElapsed || 0 : 0));
+  const expectedIst = _soll > 0 ? (bruttoForSollSec / 3600) * _soll : 0;
   const expectedIstRounded = Math.round(expectedIst);
 
-  // Freeze the SOLL number when pause is active but let the clock keep running.
-  // We use refs so the snapshot happens synchronously during render (no async effect delay).
-  const pauseWasRunningRef   = React.useRef(false);
-  const frozenExpectedIstRef = React.useRef(null);
-  if (timer.pauseRunning && !pauseWasRunningRef.current) {
-    // pause just started → take snapshot now
-    frozenExpectedIstRef.current = expectedIstRounded;
-  }
-  if (!timer.pauseRunning) {
-    frozenExpectedIstRef.current = null;
-  }
-  pauseWasRunningRef.current = timer.pauseRunning;
-
-  const displayExpectedIst =
-    timer.pauseRunning && frozenExpectedIstRef.current != null
-      ? frozenExpectedIstRef.current
-      : expectedIstRounded;
+  const displayExpectedIst = expectedIstRounded;
 
   const istDiff            = _ist - displayExpectedIst;
 
   const getIstStatus = () => {
     if (!timer.running && timer.elapsed === 0) return 'neutral';
     if (_soll <= 0 || expectedIst <= 0) return 'neutral';
-    const dev = (expectedIst - _ist) / expectedIst;
+    const dev = (displayExpectedIst - _ist) / displayExpectedIst;
     if (dev <= 0.05) return 'good';
     if (dev <= 0.10) return 'warning';
     return 'bad';

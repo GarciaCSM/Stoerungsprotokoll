@@ -91,6 +91,11 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
     };
   }, [running]);
 
+  // Laufende Brutto-Uhr (Echte verbrachte Zeit seit Beginn, inkl. Pausen)
+  const bruttoWallClock = productionStartTime.current 
+    ? Math.max(0, Math.floor((Date.now() - Number(productionStartTime.current)) / 1000))
+    : elapsed;
+
   // ─── Störung timer interval ─────────────────────────────────────────────────
   useEffect(() => {
     if (stoerRunning) {
@@ -308,11 +313,6 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
     setPauseRunning(false);
     setPauseStart(null);
     setPauseElapsed(0);
-    // Brutto-Timer Startzeit um die Pausendauer nach vorne verschieben,
-    // damit elapsed nahtlos weiterläuft ohne Sprung
-    if (mainTimerStartTime.current) {
-      mainTimerStartTime.current = mainTimerStartTime.current + added * 1000;
-    }
     return added;
   };
 
@@ -343,7 +343,7 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
       setPauseStart(Date.now());
       setPauseRunning(true);
       setActiveButton('pause');
-      setRunning(false); // Brutto-Timer einfrieren
+      setRunning(true); // Brutto-Timer läuft in Pause weiter
     }
   };
 
@@ -404,11 +404,21 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
       if (session.timer_start_time) {
         const ms = parseDatetimeToMs(session.timer_start_time);
         if (ms) {
-          mainTimerStartTime.current = ms;
           if (!productionStartTime.current) productionStartTime.current = ms;
-          // Elapsed immer live aus dem absoluten Startzeitpunkt berechnen –
-          // so ist der Wert auf jedem Gerät sekundengenau, egal wie alt der DB-Eintrag ist.
-          setElapsed(Math.max(0, Math.floor((Date.now() - ms) / 1000)));
+
+          const dbElapsed = Number(session.elapsed_seconds || 0);
+          const stoerIsRunning = Boolean(Number(session.stoerung_running || 0));
+
+          if (stoerIsRunning) {
+            // During active disturbance the production timer is intentionally frozen.
+            setElapsed(dbElapsed);
+            const sStart = session.stoerung_start_time ? parseDatetimeToMs(session.stoerung_start_time) : Date.now();
+            mainTimerStartTime.current = sStart - (dbElapsed * 1000);
+          } else {
+            // Brutto runs continuously, including pause time.
+            mainTimerStartTime.current = ms;
+            setElapsed(Math.max(0, Math.floor((Date.now() - ms) / 1000)));
+          }
         } else {
           mainTimerStartTime.current = Date.now() - ((session.elapsed_seconds || 0) * 1000);
           if (!productionStartTime.current) productionStartTime.current = mainTimerStartTime.current;
@@ -568,6 +578,7 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
     pauseRunning, pauseElapsed, totalPauseSeconds,
     mainTimerStartTime,
     productionStartTime,
+    bruttoWallClock,
     // actions
     handleStart, handlePause, handleStörungClick,
     handleIssueSelect, handleCancelStoer, resetTimer,

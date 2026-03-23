@@ -102,8 +102,10 @@ export default function ActionSection({
               <TouchableOpacity
                 style={[s.actionButton, s.startButton, timer.activeButton === 'start' && s.actionButtonActive, (allDisabled || !selectedFA) && s.actionButtonDisabled]}
                 onPress={() => showConfirm({
-                  title: timer.pauseRunning ? 'Weiter' : 'Produktion starten',
-                  message: timer.pauseRunning ? 'Produktion fortsetzen?' : 'Produktion jetzt starten?',
+                  title: timer.pauseRunning ? 'Produktion fortsetzen' : 'Produktion starten',
+                  message: timer.pauseRunning
+                    ? 'Bist du sicher, dass du die Produktion fortsetzen möchtest?'
+                    : 'Bist du sicher, dass du die Produktion starten möchtest?',
                   onConfirm: () => timer.handleStart(selectedFA, setFaSearchError, setCurrentView),
                 })}
                 disabled={allDisabled || !selectedFA || (timer.activeButton === 'start' && !timer.pauseRunning)}
@@ -127,15 +129,19 @@ export default function ActionSection({
               {/* Pause */}
               <TouchableOpacity
                 style={[s.actionButton, s.pauseButton, timer.activeButton === 'pause' && s.actionButtonActive, (allDisabled || !selectedFA) && s.actionButtonDisabled]}
-                onPress={() => showConfirm({
-                  title: timer.pauseRunning ? 'Pause beenden' : 'Pause starten',
-                  message: timer.pauseRunning ? 'Möchtest du die Pause beenden und weiterproduzieren?' : 'Möchtest du die Produktion anhalten (Pause)?',
-                  onConfirm: () => timer.handlePause(selectedFA, setFaSearchError),
-                })}
+                onPress={() => {
+                  if (timer.pauseRunning) {
+                    timer.handleStart(selectedFA, setFaSearchError, setCurrentView); // Resume production
+                  } else {
+                    timer.handlePause(selectedFA, setFaSearchError); // Start pause
+                  }
+                }}
                 disabled={allDisabled || !selectedFA}
               >
                 <MaterialIcons name="pause" size={20} color={(allDisabled || !selectedFA) ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.foreground} />
-                <Text style={[s.actionButtonText, (allDisabled || !selectedFA) && s.actionButtonTextDisabled]}>Pause setzen</Text>
+                <Text style={[s.actionButtonText, (allDisabled || !selectedFA) && s.actionButtonTextDisabled]}>
+                  {timer.pauseRunning ? 'Pause beenden' : 'Pause setzen'}
+                </Text>
               </TouchableOpacity>
 
               {/* Schicht beenden */}

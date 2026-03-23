@@ -1,102 +1,154 @@
-# Störungsprotokoll - Produktionsüberwachung
+# Stoerungsprotokoll
 
-React Native App mit Node.js Backend für die Erfassung von Produktionsstörungen mit FA-Nummern-Integration aus der metaARGON Datenbank.
+React-Native/Expo-App zur Produktionsueberwachung mit Timer, Pause, Stoerungen, SOLL/IST und Session-Sync in MariaDB.
 
-## 📁 Projektstruktur
+Diese README ist als Onboarding-Dokument gedacht: einmal lesen, dann sollte ein neuer Entwickler das Projekt lokal starten, verstehen und debuggen koennen.
 
-```
-Störungsprotkoll/
-├── api/                           # Backend API
-│   ├── config/
-│   │   ├── config.js             # Server & CORS Konfiguration
-│   │   └── database.js           # ODBC Datenbankverbindung
-│   ├── controllers/
-│   │   └── faKoepfeController.js # FA-Koepfe Geschäftslogik
-│   └── routes/
-│       └── index.js              # API Routen Definition
-├── src/                          # React Native Frontend
-│   ├── components/               # Wiederverwendbare UI-Komponenten
-│   ├── config/
-│   │   ├── apiConfig.js         # API URLs & Endpoints
-│   │   └── lineButtonConfig.js  # Linien-Störungs-Konfiguration
-│   ├── context/
-│   │   └── ShiftContext.js      # Globaler Schicht-State
-│   ├── screens/
-│   │   ├── HomeScreen.js        # Start: Linien-/Schicht-Auswahl
-│   │   └── ProtocolScreen.js    # Haupt: Timer & Störungserfassung
-│   ├── services/
-│   │   └── faService.js         # API-Client für FA-Suche
-│   ├── styles/                   # StyleSheet Definitionen
-│   └── utils/                    # Helper-Funktionen
-├── .env                          # Umgebungsvariablen (nicht im Git)
-├── server.js                     # Express Backend Entry Point
-├── test-db.js                    # DB-Verbindungstest Script
-└── package.json                  # Dependencies & Scripts
-```
+## 1. Tech-Stack
 
-## 🚀 Schnellstart
+- Frontend: React Native + Expo
+- Lokales Backend: Node.js + Express + ODBC
+- Persistenz: IONOS MariaDB ueber PHP-Endpunkte unter [php-api](php-api)
+- Mobile-Sync: Tablet -> PHP Session/IST/Stoerungen
+- Zusatz: PI-Testserver/Sensor-Simulator unter [src/Test](src/Test)
+
+## 2. Projektaufbau
+
+Wichtige Ordner und Einstiegsdateien:
+
+- [App.js](App.js): App-Entry im Expo-Umfeld
+- [server.js](server.js): Express-Server (lokale API)
+- [api](api): Node-Controller + ODBC-DB-Layer
+- [php-api](php-api): produktive PHP-Endpunkte fuer Session/IST/Stoerungen
+- [src/screens/ProtocolScreen.js](src/screens/ProtocolScreen.js): Hauptlogik der Produktionsmaske
+- [src/screens/protocol/hooks/useProductionTimer.js](src/screens/protocol/hooks/useProductionTimer.js): Timer/Pause/Stoerung-Status
+- [src/screens/protocol/hooks/useDbSync.js](src/screens/protocol/hooks/useDbSync.js): DB-Sync (Session/Stoerungen laden/schreiben)
+- [src/config/apiConfig.js](src/config/apiConfig.js): API-Basis-URLs
+- [scripts/create_tables.sql](scripts/create_tables.sql): Full-Schema
+- [scripts](scripts): Migrationen und Hilfsskripte
+
+## 3. Voraussetzungen
+
+- Node.js LTS (18/20 empfohlen)
+- Android SDK + ADB (USB-Debugging am Tablet aktiv)
+- Fuer Android-Build: JDK 17
+- ODBC-Treiber + erreichbare metaARGON-Quelle (nur fuer Node-FA-Suche relevant)
+
+Hinweis fuer Windows-Pfade:
+
+- Umlaute im Projektpfad koennen bei Gradle Probleme verursachen.
+- Falls Android-Release-Build scheitert, Projekt in einen ASCII-Pfad kopieren (z. B. `C:\Users\<user>\Stoerungsprotokoll`).
+
+## 4. Lokales Setup
+
+1. Dependencies installieren
 
 ```powershell
-# 1. Dependencies installieren
 npm install
-
-# 2. Datenbankverbindung testen
-node test-db.js
-
-# 3. Optional: Php‑API auf IONOS deployen (kopiere php-api/*.php and config.php)
-#    führe ggf. Migration aus:
-#    mysql -u user -p dbname < scripts/migrate_add_ist_wert.sql
-
-# 4. Backend starten (lokaler Node für Tests)
-npm run server
-
-# 5. Frontend starten (neues Terminal)
-npm start
 ```
 
-## 🔌 API Endpoints
+2. Environment anlegen (falls noch nicht vorhanden)
 
-### Node/Express (lokal)
-- `GET /api/health` - Health Check
-- `GET /api/search-fa?query=XXX` - FA-Nummern suchen
-- `GET /api/fa/:fanr` - Spezifische FA-Details
+- Datei [.env](.env) mit mindestens:
+	- `ODBC_CONNECTION_STRING=...`
 
-> Die App synchronisiert alle 10 s den Timer und lädt beim Start oder Schichtwechsel
-die Session + Störungen aus der Datenbank.
+3. Optional DB-Connectivity pruefen
 
-## 📱 Features
+```powershell
+node test-db.js
+```
 
-- ✅ Persistente Linienzuweisung pro Tablet
-- ✅ Timer läuft auch bei geschlossener App
-- ✅ Hybrid‑Sync: lokale und MariaDB-Session (Timer, FA, Pause, IST)
-- ✅ SOLL‑Werte per Excel oder Server laden, pro FA
-- ✅ SOLL‑Werte (pro Stunde und laufender Soll) werden jetzt auch in der Session‑DB mitgespeichert
-- ✅ IST‑Zähler im Tablet + DB (über `ist.php`) – bleibt beim Neustart erhalten
-- ✅ Per‑Schicht Timer‑State & FA, mit Schichtwechsel‑Bestätigung
-- ✅ FA-Nummern-Suche in metaARGON DB (Status 30, 35, 36)
-- ✅ Störungserfassung mit Zeittracking
-- ✅ Lokale Logs & Statistiken
-- ✅ DB-Wiederherstellung nach App‑Crash/Schichtwechsel
+## 5. Entwicklungsstart (Tablet ueber USB)
 
-## 🛠️ Konfiguration
+Empfohlener Weg fuer reales Tablet:
 
-**Backend-URL ändern:**
-`src/config/apiConfig.js` → `API_BASE_URL` (Node) und `IONOS_API_BASE` (PHP)
+1. Terminal A: Metro + Port-Reverse
 
-**ODBC-Verbindung:**
-`.env` → `ODBC_CONNECTION_STRING`
+```powershell
+npm run start:usb
+```
 
-**Störungstypen:**
-`src/config/lineButtonConfig.js`
+Das Script setzt u. a. folgende ADB-Reverse-Rules:
 
-**SOLL‑Daten:**
-Import per Excel‑Upload im Frontend oder via Node‑Script `npm run server` → PATCH `/api/soll-hours`.
+- `tcp:19000`
+- `tcp:19001`
+- `tcp:3000`
+- `tcp:3001`
 
-**DB‑Erweiterung:**
-Die Tabelle `stprot_produktion_session` enthält nun `soll_pro_stunde` und `soll_aktuell`; diese Werte werden bei jedem Sync im Feld `session.php` gespeichert und können von anderen Programmen abgefragt. Beim Schichtende landen sie zusätzlich in `stprot_schicht_abschluss`.
+2. Terminal B: Node-Server
 
-**IST‑Test:**
-Lokaler Node: `npm run test:ist` oder DB‑Variante `npm run test:ist-db`.
-## 📄 Lizenz
+```powershell
+npm run server
+```
 
-Internes Projekt
+Wenn `EADDRINUSE: 3001` erscheint, laeuft bereits ein Prozess auf dem Port. Dann den Prozess beenden oder den Port wechseln.
+
+## 6. Wichtige NPM-Scripts
+
+- `npm run start`: Expo Start (Dev Client)
+- `npm run start:usb`: Expo Start + ADB reverse fuer Tablet
+- `npm run server`: Express API starten
+- `npm run server:dev`: Express API mit nodemon
+- `npm run test:pi-server`: lokaler PI-Kontext-Testserver
+- `npm run test:sensor`: Sensor-Simulator
+- `npm run test:ist` / `npm run test:ist-db`: IST-Testpfade
+
+## 7. Datenfluss in kurz
+
+1. Benutzer waehlt Linie/Schicht/Bereich + FA.
+2. Timer startet in [useProductionTimer](src/screens/protocol/hooks/useProductionTimer.js).
+3. [useDbSync](src/screens/protocol/hooks/useDbSync.js) synct Session-Status regelmaessig nach PHP.
+4. PHP schreibt in `stprot_produktion_session`.
+5. Stoerungen gehen nach Abschluss in `stprot_stoerungen`.
+6. IST kommt ueber `ist.php` (Sensor/Server-Seite), nicht mehr vom Tablet in Session-POST.
+
+## 8. Session-Verhalten (wichtig)
+
+- Eine Produktion wird ueber `session_run_key` identifiziert.
+- Pause/Fortsetzen darf keine neue Session erzeugen.
+- Nach Schichtende wird Session auf inaktiv gesetzt; beim erneuten Auswaehlen derselben Schicht darf nicht automatisch die alte Session als aktiv geladen werden.
+- Bereich/Station wird mitgespeichert und bei GET/DELETE im Session-Endpoint mitberuecksichtigt.
+
+## 9. Datenbank: Schema und Migrationen
+
+Neues System aufsetzen:
+
+- [scripts/create_tables.sql](scripts/create_tables.sql)
+
+Bestehende DB aktualisieren (je nach Stand):
+
+- [scripts/migrate_add_ist_wert.sql](scripts/migrate_add_ist_wert.sql)
+- [scripts/migrate_add_netto_seconds.sql](scripts/migrate_add_netto_seconds.sql)
+- [scripts/migrate_add_session_run_key.sql](scripts/migrate_add_session_run_key.sql)
+- [scripts/migrate_add_bereich_to_session.sql](scripts/migrate_add_bereich_to_session.sql)
+
+## 10. Konfiguration
+
+- API-URLs: [src/config/apiConfig.js](src/config/apiConfig.js)
+	- `API_BASE_URL` fuer Node
+	- `IONOS_API_BASE` fuer PHP
+- ODBC/Server: [api/config/config.js](api/config/config.js)
+- DB-Layer: [api/config/database.js](api/config/database.js)
+- Stoerungstypen pro Linie: [src/config/lineButtonConfig.js](src/config/lineButtonConfig.js)
+
+## 11. Troubleshooting
+
+- Node-Server startet nicht (`EADDRINUSE 3001`):
+	- Prozess auf Port 3001 beenden, dann `npm run server`.
+
+- App erreicht Server nicht:
+	- `npm run start:usb` nutzen.
+	- `adb reverse --list` pruefen.
+	- In [src/config/apiConfig.js](src/config/apiConfig.js) die korrekte Basis-URL sicherstellen.
+
+- Android Release Build scheitert mit Java/Gradle:
+	- JDK 17 verwenden.
+	- Umlaute im Pfad vermeiden (ASCII-Pfad nutzen).
+
+- Session wird unerwartet wiederhergestellt:
+	- Session-GET-Filter in [php-api/session.php](php-api/session.php) pruefen.
+	- Nach Schichtende muss `running/pause/stoerung/show_start_only` inaktiv sein.
+
+## 12. Lizenz
+
+Internes Projekt (nicht oeffentlich lizenziert).

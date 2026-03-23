@@ -20,6 +20,7 @@ export default function SollIstZeitRow({
   formatTime,
 }) {
   const [showTaktDropdown, setShowTaktDropdown] = useState(false);
+  // elapsed represents brutto time. For netto and takt-netto we remove pause and disturbance time.
   const nettoSeconds = Math.max(
     0,
     (timer.elapsed || 0)
@@ -114,8 +115,8 @@ export default function SollIstZeitRow({
                   <Text style={s.zeitPairLabel}>IST START</Text>
                 </View>
                 <Text style={s.zeitPairValue}>
-                  {timer.mainTimerStartTime.current
-                    ? new Date(timer.mainTimerStartTime.current).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+                  {timer.productionStartTime.current
+                    ? new Date(timer.productionStartTime.current).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
                     : '--:--'}
                 </Text>
               </View>
@@ -164,7 +165,7 @@ export default function SollIstZeitRow({
             <View style={s.zeitPairItem}>
               <View style={s.zeitInnerBox}>
                 <Text style={s.zeitPairLabel}>BRUTTO</Text>
-                <Text style={s.zeitPairValue}>{formatTime(timer.elapsed)}</Text>
+                <Text style={s.zeitPairValue}>{formatTime(timer.bruttoWallClock || 0)}</Text>
               </View>
             </View>
             <View style={s.zeitPairItem}>
