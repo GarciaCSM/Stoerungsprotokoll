@@ -176,6 +176,23 @@ const ProtocolScreen = () => {
 
   const istDiff            = _ist - displayExpectedIst;
 
+  const istStartTimeMs = timer.mainTimerStartTime?.current || null;
+  const sollStartTimeMs = (() => {
+    if (!istStartTimeMs) return null;
+    const shiftName = shiftData.selectedShift;
+    if (shiftName === 'Frühschicht') {
+      const started = new Date(istStartTimeMs);
+      const dayStart = new Date(started);
+      dayStart.setHours(6, 0, 0, 0);
+      const dayStartEnd = new Date(dayStart);
+      dayStartEnd.setMinutes(30);
+      if (started >= dayStart && started <= dayStartEnd) {
+        return dayStart.getTime();
+      }
+    }
+    return istStartTimeMs;
+  })();
+
   const getIstStatus = () => {
     if (!timer.running && timer.elapsed === 0) return 'neutral';
     if (_soll <= 0 || expectedIst <= 0) return 'neutral';
@@ -593,6 +610,8 @@ const ProtocolScreen = () => {
             expectedIstRounded={displayExpectedIst}
             istDiff={istDiff} istStatus={istStatus} istColor={istColor}
             stoerTotalSeconds={stoerTotalSeconds}
+            istStartTime={istStartTimeMs}
+            sollStartTime={sollStartTimeMs}
             taktBrutto={taktBrutto}
             onSelectTaktBrutto={setTaktBrutto}
             isImportingSoll={isImportingSoll} isFetchingSoll={isFetchingSoll}

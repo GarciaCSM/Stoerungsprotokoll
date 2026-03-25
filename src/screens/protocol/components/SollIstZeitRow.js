@@ -13,6 +13,8 @@ export default function SollIstZeitRow({
   _soll, _ist, _pauseSec,
   expectedIstRounded, istDiff, istStatus, istColor,
   stoerTotalSeconds,
+  istStartTime,
+  sollStartTime,
   taktBrutto,
   onSelectTaktBrutto,
   isImportingSoll, isFetchingSoll,
@@ -115,8 +117,8 @@ export default function SollIstZeitRow({
                   <Text style={s.zeitPairLabel}>IST START</Text>
                 </View>
                 <Text style={s.zeitPairValue}>
-                  {timer.productionStartTime.current
-                    ? new Date(timer.productionStartTime.current).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+                  {istStartTime
+                    ? new Date(istStartTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
                     : '--:--'}
                 </Text>
               </View>
@@ -127,7 +129,11 @@ export default function SollIstZeitRow({
                   <MaterialIcons name="access-time" size={13} color={THEME.colors.dark.success} style={{ marginRight: 4 }} />
                   <Text style={s.zeitPairLabel}>SOLL START</Text>
                 </View>
-                <Text style={s.zeitPairValue}>--:--</Text>
+                <Text style={s.zeitPairValue}>
+                  {sollStartTime
+                    ? new Date(sollStartTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+                    : '--:--'}
+                </Text>
               </View>
             </View>
           </View>
