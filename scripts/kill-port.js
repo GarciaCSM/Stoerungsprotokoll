@@ -5,12 +5,13 @@
  */
 const { execSync } = require('child_process');
 // default port must match the API_CONFIG default above
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 5000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 
 try {
   const out = execSync('netstat -ano').toString();
+  const stateRegex = /(ABH|LISTEN|LISTENING)/i;
   const line = out.split('\n').find(
-    l => l.includes(`:${PORT}`) && (l.includes('ABH') || l.includes('LISTEN'))
+    l => l.includes(`:${PORT}`) && stateRegex.test(l)
   );
   if (line) {
     const pid = line.trim().split(/\s+/).pop();

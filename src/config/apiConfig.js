@@ -1,8 +1,7 @@
 // API Configuration
-// USB-Entwicklung (adb reverse): USE_LOCALHOST = true → localhost
-// WLAN / Tablet-Produktion:      USE_LOCALHOST = false → LAN-IP
-// Für lokale Tests (z.B. `npm run test:pi-server`) sollte hier true stehen
-const USE_LOCALHOST = false; // true nur für USB-Entwicklung am PC
+// Im Entwickler-Modus mit USB- oder Emulator-Test: localhost nutzen.
+// Für echtes WLAN Pi: USE_LOCALHOST ausknipsen und PI_IP auf Pi-Adresse setzen.
+const USE_LOCALHOST = false;
 
 export const API_BASE_URL =
   __DEV__ && USE_LOCALHOST
@@ -10,9 +9,7 @@ export const API_BASE_URL =
     : 'http://192.168.10.187:3001/api';
 
 // Raspberry Pi – direkter Kontext-Empfänger (Tablet → Pi)
-// Im Büro/Test (USE_LOCALHOST=true):  http://localhost:3000  (adb reverse + npm run test:pi-server)
-// Produktion   (USE_LOCALHOST=false): http://<PI-IP>:3000   ← echte Pi-IP eintragen
-const PI_IP = '192.168.10.134'; // ← Pi-IP hier anpassen (jetzt dein Pi)
+const PI_IP = '192.168.10.134'; // <-- hier deine Pi-IP eintragen
 export const PI_SERVER_URL =
   __DEV__ && USE_LOCALHOST
     ? 'http://localhost:3000'

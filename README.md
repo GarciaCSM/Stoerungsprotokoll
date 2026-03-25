@@ -10,7 +10,7 @@ Diese README ist als Onboarding-Dokument gedacht: einmal lesen, dann sollte ein 
 - Lokales Backend: Node.js + Express + ODBC
 - Persistenz: IONOS MariaDB ueber PHP-Endpunkte unter [php-api](php-api)
 - Mobile-Sync: Tablet -> PHP Session/IST/Stoerungen
-- Zusatz: PI-Testserver/Sensor-Simulator unter [src/Test](src/Test)
+- Zusatz: PI-Testserver/Sensor-Simulator unter [src/Test](src/Test) (dies sind die echten Service-Implementierungen, die genutzt werden; keine weiteren externen Test-Tools nötig)
 
 ## 2. Projektaufbau
 
@@ -89,9 +89,11 @@ Wenn `EADDRINUSE: 3001` erscheint, laeuft bereits ein Prozess auf dem Port. Dann
 - `npm run start:usb`: Expo Start + ADB reverse fuer Tablet
 - `npm run server`: Express API starten
 - `npm run server:dev`: Express API mit nodemon
-- `npm run test:pi-server`: lokaler PI-Kontext-Testserver
-- `npm run test:sensor`: Sensor-Simulator
+- `npm run test:pi-server`: lokaler PI-Kontext-Testserver (in `src/Test/sensor-simulator.js` / `src/Test/pi-server.js` implementiert und produktiv genutzt)
+- `npm run test:sensor`: Sensor-Simulator (in `src/Test/ist-feeder.js`, `src/Test/sensor-simulator.js`)
 - `npm run test:ist` / `npm run test:ist-db`: IST-Testpfade
+
+> Hinweis: Die `test`-Skripte bauen die echten Service-Flows, die in dieser App verwendet werden. Es gibt kein externes Zusatz-Modul für „Testdaten“; wir arbeiten direkt mit diesen implementierten Simulationen.
 
 ## 7. Datenfluss in kurz
 

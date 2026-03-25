@@ -1,12 +1,10 @@
 import { useEffect, useRef, useCallback } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PAYLOAD_STORAGE_KEY } from '../../../tasks/backgroundSyncTask';
 
 const API_BASE = 'https://cosmetic-service.com/php-api/produktion';
-const SYNC_INTERVAL_MS = 1_000; // alle 1 Sekunde
+const SYNC_INTERVAL_MS = 10_000; // alle 10 Sekunden
 
 /**
- * Synct den laufenden Timer-Zustand jede Sekunde in die IONOS MariaDB.
+ * Synct den laufenden Timer-Zustand alle 10s in die IONOS MariaDB.
  * Störungen werden sofort nach Abschluss übertragen.
  *
  * Verwendung in ProtocolScreen.js:
@@ -14,9 +12,10 @@ const SYNC_INTERVAL_MS = 1_000; // alle 1 Sekunde
  *   // Störung direkt nach saveStoerLog übertragen:
  *   await dbSync.syncStoerung({ issue, startTime, endTime, durationSeconds, notes });
  */
-export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue, sollPerHour, sollAktuell, stoerTotalSeconds }) {
+export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue }) {
   const syncIntervalRef = useRef(null);
   const lastSyncedRef   = useRef(null); // verhindert doppelte Syncs bei identischem Zustand
+  const lastIstRef      = useRef(0);   // zuletzt erfolgreich in die DB geschriebener IST-Wert
 
   // ── Hilfsfunktion: fetch mit Timeout ─────────────────────────────────────
   const apiFetch = async (path, options = {}) => {
@@ -34,44 +33,10 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     }
   };
 
-  const parseJsonResponse = async (res, label) => {
-    const raw = await res.text().catch(() => '');
-    const text = (raw || '').trim();
-
-    if (!text) return null;
-
-    try {
-      return JSON.parse(text);
-    } catch {
-      // Some PHP hosts prepend notices/BOM before JSON; try to recover JSON body.
-      const startObj = text.indexOf('{');
-      const endObj = text.lastIndexOf('}');
-      const startArr = text.indexOf('[');
-      const endArr = text.lastIndexOf(']');
-
-      const objCandidate = startObj >= 0 && endObj > startObj ? text.slice(startObj, endObj + 1) : null;
-      const arrCandidate = startArr >= 0 && endArr > startArr ? text.slice(startArr, endArr + 1) : null;
-      const candidate = objCandidate || arrCandidate;
-
-      if (candidate) {
-        try {
-          return JSON.parse(candidate);
-        } catch {
-          // fall through to warning
-        }
-      }
-
-      const preview = text.slice(0, 220).replace(/\s+/g, ' ');
-      console.warn(`[useDbSync] ${label} returned non-json:`, res.status, preview || '<empty>');
-      return null;
-    }
-  };
-
   // ── Session-Snapshot bauen ────────────────────────────────────────────────
   const buildSessionPayload = useCallback(() => {
     if (!shiftData?.selectedLine || !shiftData?.selectedShift) return null;
 
-    // current date in YYYY-MM-DD format
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
     // timer_start_time: epoch ms → MySQL DATETIME string
@@ -80,26 +45,16 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       return new Date(Number(epochMs)).toISOString().slice(0, 19).replace('T', ' ');
     };
 
-    // calculate ongoing störung duration (in seconds) in addition to stored logs
-    const activeStoerSeconds = timer.stoerRunning && timer.stoerStart
-      ? Math.floor((Date.now() - timer.stoerStart) / 1000)
-      : 0;
-
-    const timerStart = toDatetime(timer.productionStartTime?.current || timer.mainTimerStartTime?.current);
-
     return {
       linie:                shiftData.selectedLine,
       schicht:              shiftData.selectedShift,
-      bereich:              shiftData.selectedBereich    || null,
       datum:                today,
-      // Jede Produktion (neuer Start) bekommt damit einen eindeutigen Session-Run-Key.
-      session_run_key:      timerStart,
       linienfuehrer:        shiftData.selectedLeader   || null,
       fa_nr:                selectedFA?.FANr           || null,
       artikel_nr:           selectedFA?.ArtikelNr      || null,
       artikel_bezeichnung:  selectedFA?.Artikelbezeichnung || null,
 
-      timer_start_time:     timerStart,
+      timer_start_time:     toDatetime(timer.mainTimerStartTime?.current),
       elapsed_seconds:      timer.elapsed              || 0,
       running:              timer.running ? 1 : 0,
       active_button:        timer.activeButton         || null,
@@ -108,50 +63,37 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       pause_running:        timer.pauseRunning ? 1 : 0,
       pause_start_time:     null, // nicht von außen zugänglich, wird beim Reload ignoriert
       pause_total_seconds:  timer.totalPauseSeconds    || 0,
-      // netto = brutto minus pauses minus both logged + running störungen
-      netto_seconds:        Math.max(0,
-                                (timer.elapsed || 0)
-                                - (timer.totalPauseSeconds || 0)
-                                - ((stoerTotalSeconds || 0) + activeStoerSeconds)),
+      // netto = brutto minus Pausen (Störungen stehen separat in der stoerungen-Tabelle)
+      netto_seconds:        Math.max(0, (timer.elapsed || 0) - (timer.totalPauseSeconds || 0)),
 
       stoerung_running:     timer.stoerRunning ? 1 : 0,
       stoerung_start_time:  toDatetime(timer.stoerStart),
       stoerung_aktiv_typ:   timer.selectedIssue        || null,
       stoerung_aktiv_notiz: timer.sonstigesText        || null,
 
-      // optional soll information – consumer can pass per-hour and calculated
-      // current expectation value (e.g. sollPerHour*elapsed/3600)
-      soll_pro_stunde:      typeof sollPerHour === 'number' ? sollPerHour : null,
-      soll_aktuell:         typeof sollAktuell === 'number' ? sollAktuell : null,
-
-      // IST wird nicht mehr vom Tablet in session.php geschrieben.
-      // Quelle ist ausschließlich ist.php (Sensor/Server), damit neue Produktionen
-      // keinen alten Tageswert automatisch übernehmen.
-      ist_wert: null,
+      // only send IST when we have a positive number and it has increased since
+      // the last sync. this prevents a stale tablet value from rolling the
+      // value backwards in the database (the server also guards with
+      // GREATEST, but this reduces unnecessary writes).
+      ist_wert: (() => {
+        const v = istValue != null ? Number(istValue) : null;
+        if (v != null && v > 0 && v > lastIstRef.current) {
+          lastIstRef.current = v;
+          return v;
+        }
+        return null;
+      })(),
     };
-  }, [shiftData, timer, selectedFA, sollPerHour, sollAktuell, stoerTotalSeconds]);
+  }, [shiftData, timer, selectedFA]);
 
   // ── Session in DB schreiben ───────────────────────────────────────────────
   const syncSession = useCallback(async () => {
     if (!selectionConfirmed) return;
-
-    // Erlaube initialen Upload direkt nach bestätigter Auswahl (auch vor Timer-Start),
-    // blocke danach aber "leere" Zustände, damit ein Reset nicht wieder 0-Werte hochlädt.
-    const hasActivity = Boolean(
-      timer.running ||
-      (timer.elapsed || 0) > 0 ||
-      timer.pauseRunning ||
-      timer.stoerRunning ||
-      timer.showStartOnly ||
-      timer.activeButton
-    );
-    if (!hasActivity && lastSyncedRef.current !== null) return;
-
+    // Nicht senden wenn der Timer zurückgesetzt ist (elapsed=0, running=false) –
+    // verhindert Race-Condition nach "Schicht beenden", die netto_seconds auf 0 überschreiben würde.
+    if (!timer.running && (timer.elapsed || 0) === 0) return;
     const payload = buildSessionPayload();
     if (!payload) return;
-
-    // debug payload
-    console.log('[useDbSync] payload', payload);
 
     // Nur senden wenn sich etwas geändert hat
     const snapshot = JSON.stringify(payload);
@@ -164,9 +106,6 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       });
       if (res.ok) {
         lastSyncedRef.current = snapshot;
-      } else {
-        const text = await res.text().catch(() => '');
-        console.warn('[useDbSync] Session-Sync HTTP-Fehler:', res.status, text);
       }
     } catch (e) {
       // Fehler still ignorieren – App läuft weiter
@@ -174,17 +113,12 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
         console.warn('[useDbSync] Session-Sync fehlgeschlagen:', e.message);
       }
     }
-    // Payload in AsyncStorage speichern → Background-Task kann ihn im Hintergrund senden
-    try {
-      await AsyncStorage.setItem(PAYLOAD_STORAGE_KEY, snapshot);
-    } catch (_) { /* ignorieren */ }
-  }, [selectionConfirmed, buildSessionPayload, timer, selectedFA]);
+  }, [selectionConfirmed, buildSessionPayload]);
 
   // ── Störung sofort nach Abschluss übertragen ──────────────────────────────
   const syncStoerung = useCallback(async ({ issue, startTime, endTime, durationSeconds, notes }) => {
     if (!shiftData?.selectedLine || !shiftData?.selectedShift) return;
 
-    // send tomorrow's date
     const today = new Date().toISOString().slice(0, 10);
     const lineNumber = shiftData.selectedLine?.match(/\d+/)?.[0] ?? shiftData.selectedLine;
 
@@ -192,7 +126,6 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       linie:           shiftData.selectedLine,
       linie_nummer:    lineNumber,
       schicht:         shiftData.selectedShift,
-      bereich:         shiftData.selectedBereich        || null,
       datum:           today,
       linienfuehrer:   shiftData.selectedLeader || null,
       fa_nr:           selectedFA?.FANr         || null,
@@ -204,18 +137,14 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     };
 
     try {
-      const res = await apiFetch('/stoerungen.php', {
+      await apiFetch('/stoerungen.php', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      if (res.ok) {
-        // success
-      } else {
-        const text = await res.text().catch(() => '');
-        console.warn('[useDbSync] Störung-Sync HTTP-Fehler:', res.status, text);
-      }
     } catch (e) {
-      if (e.name !== 'AbortError') console.warn('[useDbSync] Störung-Sync fehlgeschlagen:', e.message);
+      if (e.name !== 'AbortError') {
+        console.warn('[useDbSync] Störung-Sync fehlgeschlagen:', e.message);
+      }
     }
   }, [shiftData, selectedFA]);
 
@@ -250,10 +179,9 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
   const stopSession = useCallback(async () => {
     if (!shiftData?.selectedLine || !shiftData?.selectedShift) return;
     const today = new Date().toISOString().slice(0, 10);
-    const bereichParam = shiftData?.selectedBereich ? `&bereich=${encodeURIComponent(shiftData.selectedBereich)}` : '';
     try {
       await apiFetch(
-        `/session.php?linie=${encodeURIComponent(shiftData.selectedLine)}&schicht=${encodeURIComponent(shiftData.selectedShift)}${bereichParam}&datum=${today}`,
+        `/session.php?linie=${encodeURIComponent(shiftData.selectedLine)}&schicht=${encodeURIComponent(shiftData.selectedShift)}&datum=${today}`,
         { method: 'DELETE' }
       );
     } catch (e) {
@@ -269,20 +197,13 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     const shift = overrideShift || shiftData?.selectedShift;
     if (!line || !shift) return { session: null, stoerungen: null };
     const today = new Date().toISOString().slice(0, 10);
-    const bereichParam = shiftData?.selectedBereich ? `&bereich=${encodeURIComponent(shiftData.selectedBereich)}` : '';
 
     try {
-      const sessionRes = await apiFetch(`/session.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}${bereichParam}&datum=${today}`);
-      let session = null;
-      if (sessionRes.status === 200) {
-        session = await parseJsonResponse(sessionRes, 'session.php');
-      }
+      const sessionRes = await apiFetch(`/session.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}&datum=${today}`);
+      const session = sessionRes.status === 200 ? await sessionRes.json() : null;
 
       const stoerRes = await apiFetch(`/stoerungen.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}&datum=${today}`);
-      let stoerungen = null;
-      if (stoerRes.status === 200) {
-        stoerungen = await parseJsonResponse(stoerRes, 'stoerungen.php');
-      }
+      const stoerungen = stoerRes.status === 200 ? await stoerRes.json() : null;
 
       return { session, stoerungen };
     } catch (e) {
