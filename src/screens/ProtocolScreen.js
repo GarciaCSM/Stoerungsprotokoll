@@ -180,6 +180,7 @@ const ProtocolScreen = () => {
   const sollStartTimeMs = (() => {
     if (!istStartTimeMs) return null;
     const shiftName = shiftData.selectedShift;
+
     if (shiftName === 'Frühschicht') {
       const started = new Date(istStartTimeMs);
       const dayStart = new Date(started);
@@ -190,6 +191,18 @@ const ProtocolScreen = () => {
         return dayStart.getTime();
       }
     }
+
+    if (shiftName === 'Spätschicht') {
+      const started = new Date(istStartTimeMs);
+      const shiftStart = new Date(started);
+      shiftStart.setHours(14, 45, 0, 0);
+      const shiftStartEnd = new Date(shiftStart);
+      shiftStartEnd.setMinutes(shiftStartEnd.getMinutes() + 30); // bis 15:15
+      if (started >= shiftStart && started <= shiftStartEnd) {
+        return shiftStart.getTime();
+      }
+    }
+
     return istStartTimeMs;
   })();
 
