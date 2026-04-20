@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS stprot_stoerungen (
     linie               VARCHAR(50)     NOT NULL,
     linie_nummer        VARCHAR(10)     DEFAULT NULL,
     schicht             VARCHAR(50)     NOT NULL,
+    bereich             VARCHAR(100)    DEFAULT NULL,
     datum               DATE            NOT NULL,
 
     linienfuehrer       VARCHAR(100)    DEFAULT NULL,

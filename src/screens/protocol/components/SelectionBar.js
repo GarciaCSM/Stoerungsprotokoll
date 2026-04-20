@@ -37,6 +37,8 @@ export default function SelectionBar({
   handleConfirmSelection,
   showConfirm,
 }) {
+  const getRequiredChipStyle = (value) => (value ? s.selectionChipFilled : s.selectionChipMissing);
+
   return (
     <>
       <View style={s.topSelectionBar}>
@@ -45,13 +47,13 @@ export default function SelectionBar({
             <View style={s.selectionGroup}>
               {/* Linie */}
               <TouchableOpacity
-                style={[s.selectionChip, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                style={[s.selectionChip, getRequiredChipStyle(localLine), { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
                 onPress={() => { if (!lineLocked) setOpenSelectModal('line'); }}
                 activeOpacity={lineLocked ? 1 : 0.7}
               >
                 <View>
                   <Text style={s.selectionLabelSmall}>Linie</Text>
-                  <Text style={s.selectionValueSmall}>{localLine || ''}</Text>
+                  <Text style={s.selectionValueSmall}>{localLine || 'Bitte wählen'}</Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => {
@@ -80,21 +82,21 @@ export default function SelectionBar({
               </TouchableOpacity>
 
               {/* Linienführer */}
-              <TouchableOpacity style={s.selectionChip} onPress={() => setOpenSelectModal('leader')}>
+              <TouchableOpacity style={[s.selectionChip, getRequiredChipStyle(localLeader)]} onPress={() => setOpenSelectModal('leader')}>
                 <Text style={s.selectionLabelSmall}>Linienführer</Text>
-                <Text style={s.selectionValueSmall}>{localLeader || ''}</Text>
+                <Text style={s.selectionValueSmall}>{localLeader || 'Bitte wählen'}</Text>
               </TouchableOpacity>
 
               {/* Schicht */}
-              <TouchableOpacity style={s.selectionChip} onPress={() => setOpenSelectModal('shift')}>
+              <TouchableOpacity style={[s.selectionChip, getRequiredChipStyle(localShift)]} onPress={() => setOpenSelectModal('shift')}>
                 <Text style={s.selectionLabelSmall}>Schicht</Text>
-                <Text style={s.selectionValueSmall}>{localShift || ''}</Text>
+                <Text style={s.selectionValueSmall}>{localShift || 'Bitte wählen'}</Text>
               </TouchableOpacity>
 
               {/* Station */}
-              <TouchableOpacity style={s.selectionChip} onPress={() => setOpenSelectModal('bereich')}>
+              <TouchableOpacity style={[s.selectionChip, getRequiredChipStyle(localBereich)]} onPress={() => setOpenSelectModal('bereich')}>
                 <Text style={s.selectionLabelSmall}>Station</Text>
-                <Text style={s.selectionValueSmall}>{localBereich || ''}</Text>
+                <Text style={s.selectionValueSmall}>{localBereich || 'Bitte wählen'}</Text>
               </TouchableOpacity>
             </View>
 

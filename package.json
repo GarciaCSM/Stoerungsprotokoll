@@ -16,7 +16,8 @@
     "test:ist": "node src/Test/ist-feeder.js --host=http://192.168.10.127:5000",
     "test:ist-db": "node src/Test/ist-feeder-db.js",
     "test:pi-server": "node src/Test/pi-server.js",
-    "test:sensor": "node src/Test/sensor-simulator.js"
+    "test:sensor": "node src/Test/sensor-simulator.js",
+    "test:simulate-context": "node src/Test/simulate_context.js"
   },
   "dependencies": {
     "@expo/webpack-config": "^18.0.1",

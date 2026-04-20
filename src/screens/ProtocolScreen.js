@@ -44,7 +44,7 @@ const ProtocolScreen = () => {
   const [localShift, setLocalShift]           = useState(shiftData.selectedShift   || null);
   const [localBereich, setLocalBereich]       = useState(shiftData.selectedBereich || null);
   const [selectionConfirmed, setSelectionConfirmed] = useState(
-    !!(shiftData.selectedLine && shiftData.selectedLeader && shiftData.selectedShift)
+    !!(shiftData.selectedLine && shiftData.selectedLeader && shiftData.selectedShift && shiftData.selectedBereich)
   );
   const [lineLocked, setLineLocked]           = useState(false);
   const [openSelectModal, setOpenSelectModal] = useState(null);
@@ -304,7 +304,7 @@ const ProtocolScreen = () => {
         if      (locked === 'false')   setLineLocked(false);
         else if (locked === 'true')    setLineLocked(true);
         else if (assigned)             setLineLocked(true);
-        if (assigned && leader && shift) {
+        if (assigned && leader && shift && bereich) {
           updateShiftData({ selectedLine: assigned, selectedLeader: leader, selectedShift: shift, selectedBereich: bereich || null });
           setSelectionConfirmed(true);
           // Pi-Server beim App-Start sofort über aktuelle Linie/Schicht informieren
@@ -406,7 +406,7 @@ const ProtocolScreen = () => {
   const persistBereich = async (v) => { try { v ? await AsyncStorage.setItem('assigned_bereich', v) : await AsyncStorage.removeItem('assigned_bereich'); } catch {} };
 
   const handleConfirmSelection = async () => {
-    if (!localLine || !localLeader || !localShift) return;
+    if (!localLine || !localLeader || !localShift || !localBereich) return;
 
     // If switching away from an active selection that currently has production activity,
     // require an explicit confirmation from the user before proceeding.
@@ -461,7 +461,7 @@ const ProtocolScreen = () => {
       loadLocalLogs(localLine, localShift);
       let dbSessionRestored = false;
       try {
-        const { session, stoerungen } = await dbSync.loadFromDb(localLine, localShift);
+        const { session, stoerungen } = await dbSync.loadFromDb(localLine, localShift, localBereich);
         if (session) {
           await applyDbSession(session);
           dbSessionRestored = true;

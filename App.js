@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { StatusBar } from 'expo-status-bar';
 import * as BackgroundFetch from 'expo-background-fetch';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import ProtocolScreen from './src/screens/ProtocolScreen';
@@ -26,6 +27,7 @@ export default function App() {
 
   return (
     <ShiftProvider>
+      <StatusBar style="light" hidden={true} translucent={true} />
       <ProtocolScreen onBack={() => { /* no-op: HomeScreen removed */ }} />
     </ShiftProvider>
   );

@@ -7,12 +7,13 @@ const USE_LOCALHOST = true;
 // (works when the device is connected and `adb reverse tcp:3001 tcp:3001` is active).
 export const API_BASE_URL = USE_LOCALHOST
   ? 'http://localhost:3001/api'
-  : 'http://192.168.10.187:3001/api';
+  : 'http://192.168.10.152:3001/api';
 
 // Raspberry Pi – direkter Kontext-Empfänger (Tablet → Pi)
-// Kein localhost möglich (Pi-only)
-const PI_IP = '192.168.10.134'; // <-- hier deine Pi-IP eintragen
-export const PI_SERVER_URL = `http://${PI_IP}:3000`;
+// Verwende hier den mDNS-Hostnamen, wenn der Pi als sensor1.local erreichbar ist.
+// Beispiel: sensor1.local statt fester IP.
+const PI_HOSTNAME = 'sensor1.local'; // <-- hier deinen Pi-Hostnamen eintragen
+export const PI_SERVER_URL = `http://${PI_HOSTNAME}:3000`;
 
 // IONOS PHP-API base (für IST-Wert via DB)
 export const IONOS_API_BASE = 'https://cosmetic-service.com/php-api/produktion';

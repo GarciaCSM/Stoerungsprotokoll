@@ -35,7 +35,14 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
 
   // ── Session-Snapshot bauen ────────────────────────────────────────────────
   const buildSessionPayload = useCallback(() => {
-    if (!shiftData?.selectedLine || !shiftData?.selectedShift) return null;
+    if (!shiftData?.selectedLine || !shiftData?.selectedShift || !shiftData?.selectedBereich) {
+      console.warn('[useDbSync] Skip session sync: line/shift/bereich missing', {
+        line: shiftData?.selectedLine || null,
+        shift: shiftData?.selectedShift || null,
+        bereich: shiftData?.selectedBereich || null,
+      });
+      return null;
+    }
 
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
@@ -45,10 +52,16 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       return new Date(Number(epochMs)).toISOString().slice(0, 19).replace('T', ' ');
     };
 
+    const sessionRunKey = toDatetime(
+      timer.productionStartTime?.current || timer.mainTimerStartTime?.current
+    );
+
     return {
       linie:                shiftData.selectedLine,
       schicht:              shiftData.selectedShift,
+      bereich:              shiftData.selectedBereich || null,
       datum:                today,
+      session_run_key:      sessionRunKey,
       linienfuehrer:        shiftData.selectedLeader   || null,
       fa_nr:                selectedFA?.FANr           || null,
       artikel_nr:           selectedFA?.ArtikelNr      || null,
@@ -106,6 +119,9 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       });
       if (res.ok) {
         lastSyncedRef.current = snapshot;
+      } else {
+        const msg = await res.text();
+        console.warn('[useDbSync] Session-Sync HTTP', res.status, msg);
       }
     } catch (e) {
       // Fehler still ignorieren – App läuft weiter
@@ -117,7 +133,10 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
 
   // ── Störung sofort nach Abschluss übertragen ──────────────────────────────
   const syncStoerung = useCallback(async ({ issue, startTime, endTime, durationSeconds, notes }) => {
-    if (!shiftData?.selectedLine || !shiftData?.selectedShift) return;
+    if (!shiftData?.selectedLine || !shiftData?.selectedShift || !shiftData?.selectedBereich) {
+      console.warn('[useDbSync] Skip stoerung sync: line/shift/bereich missing');
+      return;
+    }
 
     const today = new Date().toISOString().slice(0, 10);
     const lineNumber = shiftData.selectedLine?.match(/\d+/)?.[0] ?? shiftData.selectedLine;
@@ -126,6 +145,7 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       linie:           shiftData.selectedLine,
       linie_nummer:    lineNumber,
       schicht:         shiftData.selectedShift,
+      bereich:         shiftData.selectedBereich || null,
       datum:           today,
       linienfuehrer:   shiftData.selectedLeader || null,
       fa_nr:           selectedFA?.FANr         || null,
@@ -137,10 +157,14 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     };
 
     try {
-      await apiFetch('/stoerungen.php', {
+      const res = await apiFetch('/stoerungen.php', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
+      if (!res.ok) {
+        const msg = await res.text();
+        console.warn('[useDbSync] Stoerung-Sync HTTP', res.status, msg);
+      }
     } catch (e) {
       if (e.name !== 'AbortError') {
         console.warn('[useDbSync] Störung-Sync fehlgeschlagen:', e.message);
@@ -177,11 +201,12 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
   // Der letzte 10s-Sync hat elapsed_seconds bereits korrekt in der DB,
   // kein erneutes Schreiben aus einer möglicherweise veralteten Closure nötig.
   const stopSession = useCallback(async () => {
-    if (!shiftData?.selectedLine || !shiftData?.selectedShift) return;
+    if (!shiftData?.selectedLine || !shiftData?.selectedShift || !shiftData?.selectedBereich) return;
     const today = new Date().toISOString().slice(0, 10);
+    const bereich = shiftData?.selectedBereich || '';
     try {
       await apiFetch(
-        `/session.php?linie=${encodeURIComponent(shiftData.selectedLine)}&schicht=${encodeURIComponent(shiftData.selectedShift)}&datum=${today}`,
+        `/session.php?linie=${encodeURIComponent(shiftData.selectedLine)}&schicht=${encodeURIComponent(shiftData.selectedShift)}&bereich=${encodeURIComponent(bereich)}&datum=${today}`,
         { method: 'DELETE' }
       );
     } catch (e) {
@@ -192,17 +217,18 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
   }, [shiftData]);
 
   // ── Load session + störungen + optional SOLL aus DB (used on app-open / schichtwechsel)
-  const loadFromDb = useCallback(async (overrideLine, overrideShift) => {
+  const loadFromDb = useCallback(async (overrideLine, overrideShift, overrideBereich) => {
     const line = overrideLine || shiftData?.selectedLine;
     const shift = overrideShift || shiftData?.selectedShift;
-    if (!line || !shift) return { session: null, stoerungen: null };
+    const bereich = overrideBereich || shiftData?.selectedBereich || '';
+    if (!line || !shift || !bereich) return { session: null, stoerungen: null };
     const today = new Date().toISOString().slice(0, 10);
 
     try {
-      const sessionRes = await apiFetch(`/session.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}&datum=${today}`);
+      const sessionRes = await apiFetch(`/session.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}&bereich=${encodeURIComponent(bereich)}&datum=${today}`);
       const session = sessionRes.status === 200 ? await sessionRes.json() : null;
 
-      const stoerRes = await apiFetch(`/stoerungen.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}&datum=${today}`);
+      const stoerRes = await apiFetch(`/stoerungen.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}&bereich=${encodeURIComponent(bereich)}&datum=${today}`);
       const stoerungen = stoerRes.status === 200 ? await stoerRes.json() : null;
 
       return { session, stoerungen };

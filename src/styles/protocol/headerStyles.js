@@ -123,6 +123,12 @@ export default StyleSheet.create({
     minWidth: THEME.dimensions.minWidthSmall,
     alignItems: 'flex-start',
   },
+  selectionChipMissing: {
+    borderColor: COLORS.danger,
+  },
+  selectionChipFilled: {
+    borderColor: COLORS.success,
+  },
   selectionLabelSmall: {
     fontSize: 9,
     color: COLORS.foregroundMuted,
