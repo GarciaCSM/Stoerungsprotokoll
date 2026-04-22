@@ -93,6 +93,8 @@ Wenn `EADDRINUSE: 3001` erscheint, laeuft bereits ein Prozess auf dem Port. Dann
 - `npm run test:sensor`: Sensor-Simulator (in `src/Test/ist-feeder.js`, `src/Test/sensor-simulator.js`)
 - `npm run test:ist` / `npm run test:ist-db`: IST-Testpfade
 
+- !! Anmerkung es reicht beim PI 4 den pi-server zu starten. Dieser hat auch schon die GPIO Umsetzung. Im master-branch ist die veraltete Version vom pi-server
+
 > Hinweis: Die `test`-Skripte bauen die echten Service-Flows, die in dieser App verwendet werden. Es gibt kein externes Zusatz-Modul für „Testdaten“; wir arbeiten direkt mit diesen implementierten Simulationen.
 
 ## 7. Datenfluss in kurz
@@ -154,3 +156,5 @@ Bestehende DB aktualisieren (je nach Stand):
 ## 12. Lizenz
 
 Internes Projekt (nicht oeffentlich lizenziert).
+
+## Bei fragen Kontakt mit Melih Iskender
