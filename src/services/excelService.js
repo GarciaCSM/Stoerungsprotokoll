@@ -130,7 +130,11 @@ export async function fetchSollFromServer() {
   const errors = [];
   for (const url of fallbacks) {
     try {
-      const resp = await fetch(url);
+      const resp = await fetch(url, {
+        headers: {
+          'x-client-source': 'tablet-app',
+        },
+      });
       if (!resp.ok) throw new Error(`Server antwortet mit ${resp.status}`);
       const payload = await resp.json();
       return { ok: true, mapping: payload.mapping || {}, arbeitMapping: payload.arbeitMapping || {}, source: payload.source || url };

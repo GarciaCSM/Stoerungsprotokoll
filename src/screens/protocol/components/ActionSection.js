@@ -45,6 +45,7 @@ export default function ActionSection({
 }) {
   // All buttons are locked until a shift is confirmed (and unlocked again after Ende)
   const allDisabled = !selectionConfirmed;
+  const stoerungDisabled = allDisabled || !selectedFA || !timer.running;
   return (
     <>
       {/* Active Störung timer */}
@@ -118,12 +119,12 @@ export default function ActionSection({
 
               {/* Störung */}
               <TouchableOpacity
-                style={[s.actionButton, s.stoerungButton, timer.activeButton === 'störung' && s.actionButtonActive, allDisabled && s.actionButtonDisabled]}
+                style={[s.actionButton, s.stoerungButton, timer.activeButton === 'störung' && s.actionButtonActive, stoerungDisabled && s.actionButtonDisabled]}
                 onPress={() => timer.handleStörungClick(setCurrentView)}
-                disabled={allDisabled}
+                disabled={stoerungDisabled}
               >
-                <MaterialIcons name="warning" size={20} color={allDisabled ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.foreground} />
-                <Text style={[s.actionButtonText, allDisabled && s.actionButtonTextDisabled]}>Störung melden</Text>
+                <MaterialIcons name="warning" size={20} color={stoerungDisabled ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.foreground} />
+                <Text style={[s.actionButtonText, stoerungDisabled && s.actionButtonTextDisabled]}>Störung melden</Text>
               </TouchableOpacity>
 
               {/* Pause */}

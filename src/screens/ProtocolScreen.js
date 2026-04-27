@@ -73,6 +73,23 @@ const ProtocolScreen = () => {
     return `selected_fa:${line}:${shift}:${st}`;
   };
 
+  const sendPiContext = async (payload, reason = 'unknown') => {
+    if (!PI_SERVER_URL) return;
+    try {
+      const res = await fetch(`${PI_SERVER_URL}/context`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const msg = await res.text();
+        console.warn(`[PI context] ${reason} HTTP ${res.status}: ${msg}`);
+      }
+    } catch (e) {
+      console.warn(`[PI context] ${reason} failed:`, e.message);
+    }
+  };
+
   // Persist FA whenever it changes — skip the very first render (null initial state)
   // to avoid overwriting the stored value before the restore effect reads it
   useEffect(() => {
@@ -308,13 +325,10 @@ const ProtocolScreen = () => {
           updateShiftData({ selectedLine: assigned, selectedLeader: leader, selectedShift: shift, selectedBereich: bereich || null });
           setSelectionConfirmed(true);
           // Pi-Server beim App-Start sofort über aktuelle Linie/Schicht informieren
-          if (PI_SERVER_URL) {
-            fetch(`${PI_SERVER_URL}/context`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ linie: assigned, schicht: shift, bereich: bereich || null, fa_nr: restoredFA?.FANr || null })
-            }).catch(() => {});
-          }
+          await sendPiContext(
+            { linie: assigned, schicht: shift, bereich: bereich || null, fa_nr: restoredFA?.FANr || null },
+            'restore-assignment'
+          );
         }
       } catch (e) { console.warn('Failed to load persisted assignment', e); }
     })();
@@ -341,18 +355,12 @@ const ProtocolScreen = () => {
     setFaSearchText(''); setFaSearchResults([]); setFaSearchError('');
 
     // Pi-Server über neue FA und aktuellen Kontext informieren
-    if (PI_SERVER_URL) {
-      fetch(`${PI_SERVER_URL}/context`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          linie:  shiftData.selectedLine  || null,
-          schicht: shiftData.selectedShift || null,
-          bereich: localBereich || null,
-          fa_nr:   fa.FANr,
-        }),
-      }).catch(() => {});
-    }
+    sendPiContext({
+      linie:  shiftData.selectedLine  || null,
+      schicht: shiftData.selectedShift || null,
+      bereich: localBereich || null,
+      fa_nr:   fa.FANr,
+    }, 'fa-selected');
 
     // Prüfe ob für diese FA heute auf dieser Linie/Schicht eine Session gespeichert ist.
     // Falls ja → Brutto-Start, Netto-Zeit, Pausen, IST-Stk wiederherstellen (selbe Produktion).
@@ -426,6 +434,10 @@ const ProtocolScreen = () => {
         await persistLeader(localLeader); await persistBereich(localBereich);
         await AsyncStorage.setItem('assigned_line_locked', 'true');
         setLineLocked(true); setSelectionConfirmed(true);
+        await sendPiContext(
+          { linie: localLine, schicht: localShift, bereich: localBereich, fa_nr: selectedFA?.FANr || null },
+          'confirm-same-selection'
+        );
         return; // Timer nicht anfassen – Produktion läuft unverändert weiter
       }
 
@@ -449,13 +461,10 @@ const ProtocolScreen = () => {
       setLineLocked(true); setSelectionConfirmed(true);
 
       // inform Pi‑Server über aktualisierte Linie/Schicht/Bereich/FA
-      if (PI_SERVER_URL) {
-        fetch(`${PI_SERVER_URL}/context`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ linie: localLine, schicht: localShift, bereich: localBereich, fa_nr: selectedFA?.FANr || null })
-        }).catch(() => {});
-      }
+      sendPiContext(
+        { linie: localLine, schicht: localShift, bereich: localBereich, fa_nr: selectedFA?.FANr || null },
+        'confirm-selection-changed'
+      );
 
       // 3) DB zuerst laden – DB gewinnt immer über lokalen Cache
       loadLocalLogs(localLine, localShift);
@@ -528,13 +537,7 @@ const ProtocolScreen = () => {
     // Dann running=0 setzen (DELETE) – Zeile bleibt als Historien-Protokoll erhalten.
     await dbSync.stopSession();
     // Kontext beim Pi löschen (optional)
-    if (PI_SERVER_URL) {
-      fetch(`${PI_SERVER_URL}/context`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ linie: null, schicht: null })
-      }).catch(() => {});
-    }
+    sendPiContext({ linie: null, schicht: null, bereich: null }, 'end-production-clear-selection');
     await timer.resetTimer();
     try { await AsyncStorage.removeItem('assigned_leader'); } catch {}
     try { await AsyncStorage.removeItem('assigned_shift');  } catch {}
@@ -549,13 +552,7 @@ const ProtocolScreen = () => {
     setSelectionConfirmed(false); setLocalLeader(null); setLocalShift(null); setLocalBereich(null);
     setSelectedFA(null);
     // FA aus Pi-Kontext löschen
-    if (PI_SERVER_URL) {
-      fetch(`${PI_SERVER_URL}/context`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fa_nr: null }),
-      }).catch(() => {});
-    }
+    sendPiContext({ fa_nr: null }, 'end-production-clear-fa');
   };
 
   // 
@@ -604,13 +601,7 @@ const ProtocolScreen = () => {
             handleSelectFA={handleSelectFA}
             onRemoveFA={() => {
               setSelectedFA(null);
-              if (PI_SERVER_URL) {
-                fetch(`${PI_SERVER_URL}/context`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ fa_nr: null }),
-                }).catch(() => {});
-              }
+              sendPiContext({ fa_nr: null }, 'fa-removed');
             }}
             showConfirm={showConfirm}
             selectionReady={selectionConfirmed && !!shiftData.selectedBereich}
