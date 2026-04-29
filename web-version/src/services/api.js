@@ -51,8 +51,10 @@ export async function syncSession(payload) {
   return response.json();
 }
 
-export async function stopSession({ linie, schicht, bereich, datum }) {
-  const query = new URLSearchParams({ linie, schicht, bereich, datum }).toString();
+export async function stopSession({ linie, schicht, bereich, datum, session_run_key }) {
+  const params = new URLSearchParams({ linie, schicht, bereich, datum });
+  if (session_run_key) params.set('session_run_key', session_run_key);
+  const query = params.toString();
   const response = await fetch(`${API_ENDPOINTS.SESSION}?${query}`, {
     method: 'DELETE',
   });

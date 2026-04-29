@@ -413,6 +413,9 @@ export default function App() {
         schicht: selectedShift,
         bereich: selectedBereich,
         datum: today,
+        session_run_key: productionStartRef.current
+          ? new Date(productionStartRef.current).toISOString().slice(0, 19).replace('T', ' ')
+          : null,
       });
       await sendContext({ linie: null, schicht: null, bereich: null, fa_nr: null });
     } catch (error) {

@@ -33,6 +33,11 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     }
   };
 
+  const toDatetime = useCallback((epochMs) => {
+    if (!epochMs) return null;
+    return new Date(Number(epochMs)).toISOString().slice(0, 19).replace('T', ' ');
+  }, []);
+
   // ── Session-Snapshot bauen ────────────────────────────────────────────────
   const buildSessionPayload = useCallback(() => {
     if (!shiftData?.selectedLine || !shiftData?.selectedShift || !shiftData?.selectedBereich) {
@@ -47,11 +52,6 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
     // timer_start_time: epoch ms → MySQL DATETIME string
-    const toDatetime = (epochMs) => {
-      if (!epochMs) return null;
-      return new Date(Number(epochMs)).toISOString().slice(0, 19).replace('T', ' ');
-    };
-
     const sessionRunKey = toDatetime(
       timer.productionStartTime?.current || timer.mainTimerStartTime?.current
     );
@@ -107,6 +107,8 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     if (!timer.running && (timer.elapsed || 0) === 0) return;
     const payload = buildSessionPayload();
     if (!payload) return;
+
+    
 
     // Nur senden wenn sich etwas geändert hat
     const snapshot = JSON.stringify(payload);
@@ -204,17 +206,25 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     if (!shiftData?.selectedLine || !shiftData?.selectedShift || !shiftData?.selectedBereich) return;
     const today = new Date().toISOString().slice(0, 10);
     const bereich = shiftData?.selectedBereich || '';
+    const sessionRunKey = toDatetime(timer.productionStartTime?.current || timer.mainTimerStartTime?.current);
     try {
-      await apiFetch(
-        `/session.php?linie=${encodeURIComponent(shiftData.selectedLine)}&schicht=${encodeURIComponent(shiftData.selectedShift)}&bereich=${encodeURIComponent(bereich)}&datum=${today}`,
-        { method: 'DELETE' }
-      );
+      const urlPath = `/session.php?linie=${encodeURIComponent(shiftData.selectedLine)}&schicht=${encodeURIComponent(shiftData.selectedShift)}&bereich=${encodeURIComponent(bereich)}&datum=${today}${sessionRunKey ? `&session_run_key=${encodeURIComponent(sessionRunKey)}` : ''}`;
+      console.warn('[useDbSync] stopSession DELETE ->', urlPath);
+      const res = await apiFetch(urlPath, { method: 'DELETE' });
+      if (!res.ok) {
+        const txt = await res.text();
+        console.warn('[useDbSync] stopSession HTTP', res.status, txt);
+      } else {
+        console.warn('[useDbSync] stopSession success', res.status);
+      }
     } catch (e) {
       if (e.name !== 'AbortError') {
         console.warn('[useDbSync] stopSession fehlgeschlagen:', e.message);
       }
     }
-  }, [shiftData]);
+  }, [shiftData, timer, toDatetime]);
+
+  
 
   // ── Load session + störungen + optional SOLL aus DB (used on app-open / schichtwechsel)
   const loadFromDb = useCallback(async (overrideLine, overrideShift, overrideBereich) => {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ConfirmModal from '../components/ConfirmModal';
 import { useShift } from '../context/ShiftContext';
@@ -63,6 +63,7 @@ const ProtocolScreen = () => {
   const [selectedFA, setSelectedFA]             = useState(null);
   const [taktBrutto, setTaktBrutto]             = useState(10);
   const faInitialized = useRef(false);
+  const scrollViewRef = useRef(null);
   // Wenn true: selectionConfirmed wurde für die GLEICHE Linie/Schicht neu gesetzt
   // → useEffect darf den laufenden Timer NICHT anfassen
   const skipTimerRestoreRef = useRef(false);
@@ -589,7 +590,11 @@ const ProtocolScreen = () => {
         showConfirm={showConfirm}
       />
 
-      <ScrollView style={protocolScreenStyles.contentContainer} contentContainerStyle={protocolScreenStyles.scrollContent}>
+      <ScrollView
+        ref={scrollViewRef}
+        style={protocolScreenStyles.contentContainer}
+        contentContainerStyle={protocolScreenStyles.scrollContent}
+      >
         <View style={protocolScreenStyles.dashboardGrid}>
           <FaSection
             faSearchText={faSearchText} setFaSearchText={setFaSearchText}
@@ -635,6 +640,7 @@ const ProtocolScreen = () => {
           lineButtonConfig={lineButtonConfig}
           onEnde={handleEnde}
           formatTime={formatTime}
+          scrollViewRef={scrollViewRef}
         />
 
         {selectionConfirmed && !timer.selectedIssue && currentView !== 'störung' && (
@@ -762,26 +768,13 @@ const ProtocolScreen = () => {
               color: '#FECACA',
               textAlign: 'center',
             }}>{timer.selectedIssue}</Text>
-            {timer.selectedIssue === 'Sonstiges' && (
-              <TextInput
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.12)',
-                  borderWidth: 1,
-                  borderColor: 'rgba(252, 165, 165, 0.4)',
-                  borderRadius: 10,
-                  padding: 12,
-                  color: '#FEF2F2',
-                  fontSize: 15,
-                  width: '100%',
-                  minHeight: 80,
-                  textAlignVertical: 'top',
-                }}
-                placeholder="Beschreibe die Störung..."
-                placeholderTextColor="rgba(252,165,165,0.5)"
-                value={timer.sonstigesText}
-                onChangeText={timer.setSonstigesText}
-                multiline
-              />
+            {timer.selectedIssue === 'Sonstiges' && !!timer.sonstigesText && (
+              <Text style={{
+                fontSize: 15,
+                color: '#FECACA',
+                textAlign: 'center',
+                lineHeight: 22,
+              }}>{timer.sonstigesText}</Text>
             )}
             <Text style={{
               fontSize: 48,

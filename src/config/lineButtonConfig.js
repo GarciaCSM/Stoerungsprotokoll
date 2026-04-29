@@ -7,6 +7,7 @@ export const lineButtonConfig = {
       'Kragen/Tromel',
       'Bulk Wechsel',
       'Cod./ETBO',
+      'Kupplung',
       'Sonstiges'
     ]
   },
@@ -17,6 +18,7 @@ export const lineButtonConfig = {
       'Kragen/Tromel',
       'Bulk Wechsel',
       'Cod./ETBO',
+      'Kupplung',
       'Sonstiges'
     ]
   },

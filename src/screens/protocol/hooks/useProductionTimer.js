@@ -355,10 +355,13 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
     // running remains true until the user actually picks an issue
   };
 
-  const handleIssueSelect = (issueLabel) => {
+  const handleIssueSelect = (issueLabel, notes = '') => {
     // End any running pause before starting a Störung so pause time isn't included in brutto
     endPause();
 
+    if (issueLabel === 'Sonstiges') {
+      setSonstigesText(notes.trim());
+    }
     setSelectedIssue(issueLabel);
     if (issueLabel !== 'Sonstiges') setSonstigesText('');
     prevRunningBeforeStoer.current = running;
@@ -399,7 +402,8 @@ export function useProductionTimer({ shiftData, saveStoerLog }) {
     if (!session) return;
     try {
       // Parse helpers
-      const parseDatetimeToMs = (dt) => dt ? Date.parse(dt + (dt.length === 19 ? 'Z' : '')) : null; // assume UTC-like
+      // Interpret DB datetime strings as local time (no forced 'Z' UTC suffix)
+      const parseDatetimeToMs = (dt) => dt ? Date.parse(String(dt).replace(' ', 'T')) : null;
 
       if (session.timer_start_time) {
         const ms = parseDatetimeToMs(session.timer_start_time);

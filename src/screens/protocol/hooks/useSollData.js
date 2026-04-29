@@ -59,6 +59,7 @@ export function useSollData({ selectedFA, shiftData }) {
       setIstValue(0);
       return;
     }
+
     let mounted = true;
     // query IST for tomorrow
     const datum   = new Date().toISOString().slice(0, 10);

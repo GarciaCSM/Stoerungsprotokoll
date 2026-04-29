@@ -6,7 +6,7 @@ import { THEME } from '../styles/globalStyles';
 import { useShift } from '../context/ShiftContext';
 import ProtocolScreen from './ProtocolScreen';
 
-
+// Not in use anymore, but keeping line assignment logic here for now in case we want to re-enable it on HomeScreen later.
 
 const HomeScreen = () => {
   const { shiftData, updateShiftData } = useShift();

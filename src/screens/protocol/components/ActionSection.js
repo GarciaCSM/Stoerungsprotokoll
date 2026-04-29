@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, TextInput } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, TextInput, Modal } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import s from '../../../styles/ProtocolScreenStyles';
 import { THEME } from '../../../styles/globalStyles';
@@ -42,10 +42,41 @@ export default function ActionSection({
   lineButtonConfig,
   onEnde,
   formatTime,
+  scrollViewRef,
 }) {
   // All buttons are locked until a shift is confirmed (and unlocked again after Ende)
   const allDisabled = !selectionConfirmed;
   const stoerungDisabled = allDisabled || !selectedFA || !timer.running;
+  const [sonstigesModalVisible, setSonstigesModalVisible] = useState(false);
+  const [sonstigesDraft, setSonstigesDraft] = useState('');
+
+  const openSonstigesModal = () => {
+    setSonstigesDraft(timer.sonstigesText || '');
+    setSonstigesModalVisible(true);
+  };
+
+  const confirmSonstiges = () => {
+    const note = sonstigesDraft.trim();
+    if (!note) return;
+    timer.setSonstigesText(note);
+    timer.handleIssueSelect('Sonstiges', note);
+    setSonstigesModalVisible(false);
+    setCurrentView('initial');
+  };
+
+  const cancelSonstiges = () => {
+    setSonstigesModalVisible(false);
+    setCurrentView('störung');
+  };
+
+  useEffect(() => {
+    if (currentView !== 'störung') return;
+    const handle = setTimeout(() => {
+      scrollViewRef?.current?.scrollToEnd?.({ animated: true });
+    }, 50);
+    return () => clearTimeout(handle);
+  }, [currentView, scrollViewRef]);
+
   return (
     <>
       {/* Active Störung timer */}
@@ -59,15 +90,8 @@ export default function ActionSection({
       {timer.selectedIssue && (
         <View style={{ padding: 16 }}>
           <Text style={s.selectedIssueText}>Aktuelle Störung: {timer.selectedIssue}</Text>
-          {timer.selectedIssue === 'Sonstiges' && (
-            <TextInput
-              style={s.sonstigesInput}
-              placeholder="Beschreibe die Störung..."
-              placeholderTextColor={THEME.colors.dark.foregroundDim}
-              value={timer.sonstigesText}
-              onChangeText={timer.setSonstigesText}
-              multiline
-            />
+          {timer.selectedIssue === 'Sonstiges' && !!timer.sonstigesText && (
+            <Text style={[s.selectedIssueText, { marginTop: 8, color: THEME.colors.dark.foregroundMuted }]}>Notiz: {timer.sonstigesText}</Text>
           )}
         </View>
       )}
@@ -169,11 +193,55 @@ export default function ActionSection({
           <Text style={s.sectionTitle}>STÖRUNG AUSWÄHLEN</Text>
           <StörungGrid
             buttons={lineButtonConfig[effectiveLine].störung}
-            onSelect={(label) => { timer.handleIssueSelect(label); setCurrentView('initial'); }}
+            onSelect={(label) => {
+              if (label === 'Sonstiges') {
+                openSonstigesModal();
+                return;
+              }
+              timer.handleIssueSelect(label);
+              setCurrentView('initial');
+            }}
             onClose={() => timer.handleCancelStoer(setCurrentView)}
           />
         </View>
       )}
+
+      <Modal
+        visible={sonstigesModalVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={cancelSonstiges}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <View style={{ width: '100%', maxWidth: 480, backgroundColor: '#1f2937', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: 'rgba(252, 165, 165, 0.25)' }}>
+            <Text style={[s.sectionTitle, { marginBottom: 12 }]}>SONSTIGES - NOTIZ</Text>
+            <Text style={{ color: THEME.colors.dark.foregroundMuted, marginBottom: 12 }}>Bitte zuerst den Kommentar eingeben. Danach wird die Störung aktiviert.</Text>
+            <TextInput
+              style={[s.sonstigesInput, { minHeight: 110 }]}
+              placeholder="Beschreibe die Störung..."
+              placeholderTextColor={THEME.colors.dark.foregroundDim}
+              value={sonstigesDraft}
+              onChangeText={setSonstigesDraft}
+              multiline
+              autoFocus
+              textAlignVertical="top"
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 16 }}>
+              <TouchableOpacity onPress={cancelSonstiges} style={[s.actionButton, s.modalCancel]}>
+                <Text style={s.modalCancelText}>Abbrechen</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={confirmSonstiges}
+                disabled={!sonstigesDraft.trim()}
+                style={[s.actionButton, s.stoerungButton, !sonstigesDraft.trim() && s.actionButtonDisabled]}
+              >
+                <Text style={s.actionButtonText}>Weiter</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
