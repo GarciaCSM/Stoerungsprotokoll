@@ -12,7 +12,7 @@ const SYNC_INTERVAL_MS = 10_000; // alle 10 Sekunden
  *   // Störung direkt nach saveStoerLog übertragen:
  *   await dbSync.syncStoerung({ issue, startTime, endTime, durationSeconds, notes });
  */
-export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue }) {
+export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue, sollPerHour, sollAktuell }) {
   const syncIntervalRef = useRef(null);
   const lastSyncedRef   = useRef(null); // verhindert doppelte Syncs bei identischem Zustand
   const lastIstRef      = useRef(0);   // zuletzt erfolgreich in die DB geschriebener IST-Wert
@@ -83,6 +83,9 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       stoerung_start_time:  toDatetime(timer.stoerStart),
       stoerung_aktiv_typ:   timer.selectedIssue        || null,
       stoerung_aktiv_notiz: timer.sonstigesText        || null,
+
+      soll_pro_stunde:      sollPerHour != null ? Number(sollPerHour) : null,
+      soll_aktuell:         sollAktuell != null ? Number(sollAktuell) : null,
 
       // only send IST when we have a positive number and it has increased since
       // the last sync. this prevents a stale tablet value from rolling the
