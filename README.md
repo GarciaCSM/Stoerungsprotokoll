@@ -153,7 +153,13 @@ Bestehende DB aktualisieren (je nach Stand):
 	- Session-GET-Filter in [php-api/session.php](php-api/session.php) pruefen.
 	- Nach Schichtende muss `running/pause/stoerung/show_start_only` inaktiv sein.
 
-## 12. Lizenz
+## 12. Auf Android-Gerät kriegen
+
+- cd S:\android; .\gradlew assembleRelease
+
+- adb -s "Gerätenamen falls mehr als 2 angeschlossen" install -r S:\android\app\build\outputs\apk\release\app-release.apk
+
+## 13. Lizenz
 
 Internes Projekt (nicht oeffentlich lizenziert).
 

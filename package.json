@@ -17,8 +17,12 @@
     "test:ist-db": "node src/Test/ist-feeder-db.js",
     "test:pi-server": "node src/Test/pi-server.js",
     "test:sensor": "node src/Test/sensor-simulator.js",
+    "test:sensor2": "node Sensoren/test-sensor-2.js",
+    "test:sensor3": "node Sensoren/test-sensor-3.js",
     "test:simulate-context": "node src/Test/simulate_context.js"
   },
+  "build:apk": "cd android && gradlew assembleRelease",
+  "install:apk": "adb install -r android/app/build/outputs/apk/release/app-release.apk",
   "dependencies": {
     "@expo/webpack-config": "^18.0.1",
     "@react-native-async-storage/async-storage": "1.17.11",
@@ -40,6 +44,7 @@
     "react-dom": "18.2.0",
     "react-native": "0.71.14",
     "react-native-web": "~0.18.10",
+    "react-native-zeroconf": "^0.14.0",
     "xlsx": "0.18.5"
   },
   "devDependencies": {

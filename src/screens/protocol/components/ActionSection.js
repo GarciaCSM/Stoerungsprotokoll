@@ -47,6 +47,9 @@ export default function ActionSection({
   // All buttons are locked until a shift is confirmed (and unlocked again after Ende)
   const allDisabled = !selectionConfirmed;
   const stoerungDisabled = allDisabled || !selectedFA || !timer.running;
+  const stoerungButtons = lineButtonConfig[effectiveLine]?.störung
+    || lineButtonConfig.default?.störung
+    || [];
   const [sonstigesModalVisible, setSonstigesModalVisible] = useState(false);
   const [sonstigesDraft, setSonstigesDraft] = useState('');
 
@@ -188,21 +191,27 @@ export default function ActionSection({
       )}
 
       {/* Störung selector */}
-      {currentView === 'störung' && lineButtonConfig[effectiveLine]?.störung && (
+      {currentView === 'störung' && (
         <View style={s.stoerungModal}>
           <Text style={s.sectionTitle}>STÖRUNG AUSWÄHLEN</Text>
-          <StörungGrid
-            buttons={lineButtonConfig[effectiveLine].störung}
-            onSelect={(label) => {
-              if (label === 'Sonstiges') {
-                openSonstigesModal();
-                return;
-              }
-              timer.handleIssueSelect(label);
-              setCurrentView('initial');
-            }}
-            onClose={() => timer.handleCancelStoer(setCurrentView)}
-          />
+          {stoerungButtons.length ? (
+            <StörungGrid
+              buttons={stoerungButtons}
+              onSelect={(label) => {
+                if (label === 'Sonstiges') {
+                  openSonstigesModal();
+                  return;
+                }
+                timer.handleIssueSelect(label);
+                setCurrentView('initial');
+              }}
+              onClose={() => timer.handleCancelStoer(setCurrentView)}
+            />
+          ) : (
+            <Text style={{ color: THEME.colors.dark.foregroundMuted, marginTop: 8 }}>
+              Keine Störungseinträge für {effectiveLine || 'diese Linie'} konfiguriert.
+            </Text>
+          )}
         </View>
       )}
 

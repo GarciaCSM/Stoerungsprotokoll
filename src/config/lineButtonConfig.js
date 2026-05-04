@@ -8,6 +8,12 @@ export const lineButtonConfig = {
       'Bulk Wechsel',
       'Cod./ETBO',
       'Kupplung',
+      'Einlaupstau gering',
+      'Leerer Spray-Spender-Ladekanal',
+      'Zuführung Verschluss / Collar Leer',
+      'Flasche nicht entleert',
+      'L Etqueteuse N est pas prete',
+      'Schutztür Preller 2 Am Band',
       'Sonstiges'
     ]
   },
@@ -19,6 +25,12 @@ export const lineButtonConfig = {
       'Bulk Wechsel',
       'Cod./ETBO',
       'Kupplung',
+      'Einlaupstau gering',
+      'Leerer Spray-Spender-Ladekanal',
+      'Zuführung Verschluss / Collar Leer',
+      'Flasche nicht entleert',
+      'L Etqueteuse N est pas prete',
+      'Schutztür Preller 2 Am Band',
       'Sonstiges'
     ]
   },

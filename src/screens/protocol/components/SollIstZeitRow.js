@@ -4,7 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import s from '../../../styles/ProtocolScreenStyles';
 import { THEME } from '../../../styles/globalStyles';
 
-const TAKT_BRUTTO_OPTIONS = Array.from({ length: 16 }, (_, i) => 10 + i * 5);
+const TAKT_BRUTTO_OPTIONS = Array.from({ length: 26 }, (_, i) => 10 + i); // 10 to 35
 
 export default function SollIstZeitRow({
   timer,

@@ -9,7 +9,7 @@ import { lineButtonConfig } from '../config/lineButtonConfig';
 import { MaterialIcons } from '@expo/vector-icons';
 import FAService from '../services/faService';
 import { formatTime } from '../utils/helper';
-import { API_BASE_URL, PI_SERVER_URL } from '../config/apiConfig';
+import { API_BASE_URL, getSensorUrlForLine } from '../config/apiConfig';
 
 import { useProductionTimer } from './protocol/hooks/useProductionTimer';
 import { useSollData } from './protocol/hooks/useSollData';
@@ -64,6 +64,7 @@ const ProtocolScreen = () => {
   const [taktBrutto, setTaktBrutto]             = useState(10);
   const faInitialized = useRef(false);
   const scrollViewRef = useRef(null);
+  const lastIstValueRef = useRef(null);
   // Wenn true: selectionConfirmed wurde für die GLEICHE Linie/Schicht neu gesetzt
   // → useEffect darf den laufenden Timer NICHT anfassen
   const skipTimerRestoreRef = useRef(false);
@@ -75,9 +76,16 @@ const ProtocolScreen = () => {
   };
 
   const sendPiContext = async (payload, reason = 'unknown') => {
-    if (!PI_SERVER_URL) return;
+    const line = payload?.linie || shiftData?.selectedLine;
+    const target = await getSensorUrlForLine(line);
+    console.warn('[PI context] CALL', { reason, target, payload });
+    if (!target) {
+      console.warn('[PI context] ABORTED: no target for PI context');
+      return;
+    }
     try {
-      const res = await fetch(`${PI_SERVER_URL}/context`, {
+      console.warn(`[PI context] POST ${target}/context`);
+      const res = await fetch(`${target}/context`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -85,6 +93,8 @@ const ProtocolScreen = () => {
       if (!res.ok) {
         const msg = await res.text();
         console.warn(`[PI context] ${reason} HTTP ${res.status}: ${msg}`);
+      } else {
+        console.warn(`[PI context] ${reason} OK`);
       }
     } catch (e) {
       console.warn(`[PI context] ${reason} failed:`, e.message);
@@ -234,6 +244,27 @@ const ProtocolScreen = () => {
   };
   const istStatus = getIstStatus();
   const istColor  = IST_COLORS[istStatus];
+
+  useEffect(() => {
+    const currentIst = Number(_ist) || 0;
+
+    // First sample only initializes the baseline so we do not auto-resume
+    // production immediately on mount or after restoring server state.
+    if (lastIstValueRef.current === null) {
+      lastIstValueRef.current = currentIst;
+      return;
+    }
+
+    const istIncreased = currentIst > lastIstValueRef.current;
+    lastIstValueRef.current = currentIst;
+
+    if (!istIncreased) return;
+    if (!selectionConfirmed) return;
+    if (!timer.stoerRunning || !timer.selectedIssue) return;
+    if (!selectedFA) return;
+
+    timer.handleStart(selectedFA, setFaSearchError, setCurrentView);
+  }, [_ist, selectionConfirmed, timer.stoerRunning, timer.selectedIssue, selectedFA]);
 
   const effectiveLine  = selectionConfirmed ? shiftData.selectedLine  : localLine;
   const effectiveShift = selectionConfirmed ? shiftData.selectedShift : localShift;
