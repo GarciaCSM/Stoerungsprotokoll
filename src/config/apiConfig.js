@@ -9,13 +9,17 @@ export const API_BASE_URL = USE_LOCALHOST
   ? 'http://localhost:3001/api'
   : 'http://192.168.10.152:3001/api';
 
-// Sensor mapping per Linie
+// Sensor mapping per Linie/Bereich
 // Linie 1 -> sensor1.local (Produktiv Pi)
-// Linie 2 -> Testsensor localhost:5002
+// Linie 2 -> Bereichsabhängig: Abfüllung / Verpackung
 // Linie 3 -> Testsensor localhost:5003
 const SENSOR_MAPPING = {
   'Linie 1': 'http://sensor1.local:3000',
-  'Linie 2': 'http://localhost:5002',
+  'Linie 2': {
+    default: 'http://localhost:5002',
+    Abfüllung: 'http://localhost:5002',
+    Verpackung: 'http://localhost:5004',
+  },
   'Linie 3': 'http://localhost:5003',
 };
 
@@ -68,17 +72,21 @@ export const resolveMdnsHost = async (rawUrl, timeout = 2000) => {
   }
 };
 
-export const getSensorUrlForLine = async (line) => {
+export const getSensorUrlForLine = async (line, bereich = null) => {
   if (!line) return DEFAULT_PI_SERVER;
   const mapped = SENSOR_MAPPING[line];
   if (!mapped) return DEFAULT_PI_SERVER;
 
+  const resolvedMapping = typeof mapped === 'object'
+    ? (bereich && mapped[bereich]) || mapped.default || DEFAULT_PI_SERVER
+    : mapped;
+
   // Attempt mDNS resolution only for .local hostnames
-  if (mapped.includes('.local')) {
-    const resolved = await resolveMdnsHost(mapped).catch(() => null);
-    return resolved || mapped; // if resolution failed, return original mDNS URL
+  if (resolvedMapping.includes('.local')) {
+    const resolved = await resolveMdnsHost(resolvedMapping).catch(() => null);
+    return resolved || resolvedMapping; // if resolution failed, return original mDNS URL
   }
-  return mapped;
+  return resolvedMapping;
 };
 
 export const SENSOR_MAPPING_CONST = SENSOR_MAPPING;

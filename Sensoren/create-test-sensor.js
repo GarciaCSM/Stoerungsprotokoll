@@ -33,18 +33,19 @@ function doRequest(method, rawUrl, body, cb) {
 }
 
 function createTestSensor({ port, title }) {
-  let current = { linie: null, schicht: null, bereich: null, fa_nr: null };
+  let current = { linie: null, schicht: null, bereich: null, fa_nr: null, session_run_key: null };
   let counter = 0;
 
   function printStatus() {
     const formatField = (value) => String(value ?? '(nicht gesetzt)').padEnd(29);
     console.log('\n┌──────────────────────────────────────────┐');
     console.log('║  Aktueller Kontext:                       ║');
-    console.log(`║  Linie   : ${formatField(current.linie)} ║`);
-    console.log(`║  Schicht : ${formatField(current.schicht)} ║`);
-    console.log(`║  Bereich : ${formatField(current.bereich)} ║`);
-    console.log(`║  FA-Nr   : ${formatField(current.fa_nr)} ║`);
-    console.log(`║  Zähler  : ${String(counter || 0).padEnd(29)} ║`);
+    console.log(`║  Linie     : ${formatField(current.linie)} ║`);
+    console.log(`║  Schicht   : ${formatField(current.schicht)} ║`);
+    console.log(`║  Bereich   : ${formatField(current.bereich)} ║`);
+    console.log(`║  Run-Key   : ${formatField(current.session_run_key)} ║`);
+    console.log(`║  FA-Nr     : ${formatField(current.fa_nr)} ║`);
+    console.log(`║  Zähler    : ${String(counter || 0).padEnd(29)} ║`);
     console.log('└──────────────────────────────────────────┘\n');
   }
 
@@ -59,13 +60,20 @@ function createTestSensor({ port, title }) {
     }
 
     const datum = new Date().toISOString().slice(0, 10);
-    doRequest('POST', IST_API, { linie: ctx.linie, schicht: ctx.schicht, datum, increment: 1 }, (err, json) => {
+    doRequest('POST', IST_API, {
+      linie: ctx.linie,
+      schicht: ctx.schicht,
+      bereich: ctx.bereich || null,
+      session_run_key: ctx.session_run_key || null,
+      datum,
+      increment: 1
+    }, (err, json) => {
       if (err) {
         console.error('  ✗ Fehler beim IST-Push:', err.message);
         return;
       }
       if (json?.success) {
-        console.log(`  ✓ IST jetzt: ${json.ist}  (${ctx.linie} / ${ctx.schicht} / FA ${ctx.fa_nr})`);
+        console.log(`  ✓ IST jetzt: ${json.ist}  (${ctx.linie} / ${ctx.schicht} / ${ctx.bereich || '-'} / FA ${ctx.fa_nr})`);
       } else {
         console.log('  ✗ Antwort:', JSON.stringify(json));
       }
@@ -90,6 +98,7 @@ function createTestSensor({ port, title }) {
             schicht: data.schicht ?? current.schicht,
             bereich: data.bereich ?? current.bereich,
             fa_nr:   Object.prototype.hasOwnProperty.call(data, 'fa_nr') ? data.fa_nr : current.fa_nr,
+            session_run_key: Object.prototype.hasOwnProperty.call(data, 'session_run_key') ? data.session_run_key : current.session_run_key,
           };
           console.log(`[${title}] Kontext aktualisiert:`);
           printStatus();

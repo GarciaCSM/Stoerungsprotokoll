@@ -38,6 +38,12 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     return new Date(Number(epochMs)).toISOString().slice(0, 19).replace('T', ' ');
   }, []);
 
+  const makeSessionRunKey = useCallback((baseKey, bereich) => {
+    if (!baseKey) return null;
+    if (!bereich) return baseKey;
+    return `${baseKey}::${bereich}`;
+  }, []);
+
   // ── Session-Snapshot bauen ────────────────────────────────────────────────
   const buildSessionPayload = useCallback(() => {
     if (!shiftData?.selectedLine || !shiftData?.selectedShift || !shiftData?.selectedBereich) {
@@ -52,9 +58,10 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
     // timer_start_time: epoch ms → MySQL DATETIME string
-    const sessionRunKey = toDatetime(
+    const baseRunKey = toDatetime(
       timer.productionStartTime?.current || timer.mainTimerStartTime?.current
     );
+    const sessionRunKey = makeSessionRunKey(baseRunKey, shiftData.selectedBereich);
 
     return {
       linie:                shiftData.selectedLine,

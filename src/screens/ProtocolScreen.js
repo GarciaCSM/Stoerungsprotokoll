@@ -76,9 +76,29 @@ const ProtocolScreen = () => {
   };
 
   const sendPiContext = async (payload, reason = 'unknown') => {
+    const toMysqlDatetime = (epochMs) => {
+      if (!epochMs) return null;
+      return new Date(Number(epochMs)).toISOString().slice(0, 19).replace('T', ' ');
+    };
+
+    const computedSessionRunKey = toMysqlDatetime(
+      timer?.productionStartTime?.current || timer?.mainTimerStartTime?.current
+    );
+    const makeSessionRunKey = (baseKey, bereich) => {
+      if (!baseKey) return null;
+      if (!bereich) return baseKey;
+      return `${baseKey}::${bereich}`;
+    };
+
+    const enrichedPayload = {
+      ...payload,
+      session_run_key: payload?.session_run_key || makeSessionRunKey(computedSessionRunKey, payload?.bereich || shiftData?.selectedBereich) || null,
+    };
+
     const line = payload?.linie || shiftData?.selectedLine;
-    const target = await getSensorUrlForLine(line);
-    console.warn('[PI context] CALL', { reason, target, payload });
+    const bereich = payload?.bereich || shiftData?.selectedBereich || null;
+    const target = await getSensorUrlForLine(line, bereich);
+    console.warn('[PI context] CALL', { reason, target, payload: enrichedPayload });
     if (!target) {
       console.warn('[PI context] ABORTED: no target for PI context');
       return;
@@ -88,7 +108,7 @@ const ProtocolScreen = () => {
       const res = await fetch(`${target}/context`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(enrichedPayload),
       });
       if (!res.ok) {
         const msg = await res.text();
