@@ -153,13 +153,23 @@ Bestehende DB aktualisieren (je nach Stand):
 	- Session-GET-Filter in [php-api/session.php](php-api/session.php) pruefen.
 	- Nach Schichtende muss `running/pause/stoerung/show_start_only` inaktiv sein.
 
-## 12. Auf Android-Gerät kriegen
+## 12. Sensorverbindungen
+
+- Linie 2 Abfüllung -> Sensor1.local (ich dachte wir testen Linie 1 zuerst deswegen wurde der PI so unbenannt)
+
+// Der rest hier ist noch zu machen
+
+Linie 2 Verpackung -> Sensor1Verpackung.local
+
+(Rest kommt noch)
+
+## 13. Auf Android-Gerät kriegen
 
 - cd S:\android; .\gradlew assembleRelease
 
-- adb -s "Gerätenamen falls mehr als 2 angeschlossen" install -r S:\android\app\build\outputs\apk\release\app-release.apk
+- adb -s "Gerätenamen falls mehr als 1 angeschlossen" install -r S:\android\app\build\outputs\apk\release\app-release.apk
 
-## 13. Lizenz
+## 14. Lizenz
 
 Internes Projekt (nicht oeffentlich lizenziert).
 

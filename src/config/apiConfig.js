@@ -7,7 +7,7 @@ const USE_LOCALHOST = true;
 // (works when the device is connected and `adb reverse tcp:3001 tcp:3001` is active).
 export const API_BASE_URL = USE_LOCALHOST
   ? 'http://localhost:3001/api'
-  : 'http://192.168.10.152:3001/api';
+  : 'http://192.168.10.152:3001/api'; // keine statische IP und PORT wurde noch nicht freigegeben (die kümmern sich anscheinend drum...)
 
 // Sensor mapping per Linie/Bereich
 // Werte können ein String (ein Sensor) oder ein Array (mehrere Sensoren) sein.
@@ -18,7 +18,7 @@ const SENSOR_MAPPING = {
   'Linie 1': 'http://sensor1.local:3000',
   'Linie 2': {
     default: 'http://localhost:5002',
-    Abfüllung: 'http://localhost:5002',
+    Abfüllung: 'http://sensor1.local:3000',
     Verpackung: ['http://localhost:5004', 'http://localhost:5005'],
   },
   'Linie 3': 'http://localhost:5003',
