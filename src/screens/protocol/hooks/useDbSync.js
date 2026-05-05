@@ -187,6 +187,9 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
   // ── 10s Intervall starten/stoppen ─────────────────────────────────────────
   useEffect(() => {
     if (!selectionConfirmed) {
+      // Beim Beenden den IST-Ref zurücksetzen, damit ein neuer Auftrag
+      // von 0 aufwärts synchronisiert wird (nicht erst ab dem alten Maximum).
+      lastIstRef.current = 0;
       if (syncIntervalRef.current) {
         clearInterval(syncIntervalRef.current);
         syncIntervalRef.current = null;
@@ -216,7 +219,8 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     if (!shiftData?.selectedLine || !shiftData?.selectedShift || !shiftData?.selectedBereich) return;
     const today = new Date().toISOString().slice(0, 10);
     const bereich = shiftData?.selectedBereich || '';
-    const sessionRunKey = toDatetime(timer.productionStartTime?.current || timer.mainTimerStartTime?.current);
+    const baseRunKey = toDatetime(timer.productionStartTime?.current || timer.mainTimerStartTime?.current);
+    const sessionRunKey = makeSessionRunKey(baseRunKey, bereich);
     try {
       const urlPath = `/session.php?linie=${encodeURIComponent(shiftData.selectedLine)}&schicht=${encodeURIComponent(shiftData.selectedShift)}&bereich=${encodeURIComponent(bereich)}&datum=${today}${sessionRunKey ? `&session_run_key=${encodeURIComponent(sessionRunKey)}` : ''}`;
       console.warn('[useDbSync] stopSession DELETE ->', urlPath);

@@ -65,17 +65,18 @@ export function useSollData({ selectedFA, shiftData }) {
     const datum   = new Date().toISOString().slice(0, 10);
     const linie   = shiftData?.selectedLine;
     const schicht = shiftData?.selectedShift;
+    const bereich = shiftData?.selectedBereich;
     const poll = async () => {
       try {
         if (!linie || !schicht) { if (mounted) setIstValue(0); return; }
-        const v = await FAService.getDbIst(linie, schicht, datum);
+        const v = await FAService.getDbIst(linie, schicht, datum, bereich);
         if (mounted) setIstValue(v);
       } catch (_) {}
     };
     poll();
     const timer = setInterval(poll, 1000);
     return () => { mounted = false; clearInterval(timer); };
-  }, [selectedFA?.FANr, shiftData?.selectedLine, shiftData?.selectedShift]);
+  }, [selectedFA?.FANr, shiftData?.selectedLine, shiftData?.selectedShift, shiftData?.selectedBereich]);
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
   const normKey = (v) => String(v).trim().replace(/\s+/g, '').toUpperCase();

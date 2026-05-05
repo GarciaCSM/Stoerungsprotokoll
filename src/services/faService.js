@@ -104,9 +104,9 @@ class FAService {
    * IST-Wert direkt aus IONOS-DB lesen (kein lokaler Node-Server nötig).
    * Wird von useSollData jede Sekunde aufgerufen.
    */
-  async getDbIst(linie, schicht, datum) {
+  async getDbIst(linie, schicht, datum, bereich = null) {
     try {
-      const endpointUrl = API_ENDPOINTS.DB_IST(linie, schicht, datum);
+      const endpointUrl = API_ENDPOINTS.DB_IST(linie, schicht, datum, bereich);
       console.log('[getDbIst] Fetching:', endpointUrl);
       const resp = await fetch(endpointUrl);
       if (!resp.ok) {

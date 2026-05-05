@@ -9,7 +9,7 @@ import { lineButtonConfig } from '../config/lineButtonConfig';
 import { MaterialIcons } from '@expo/vector-icons';
 import FAService from '../services/faService';
 import { formatTime } from '../utils/helper';
-import { API_BASE_URL, getSensorUrlForLine } from '../config/apiConfig';
+import { API_BASE_URL, getSensorUrlsForLine } from '../config/apiConfig';
 
 import { useProductionTimer } from './protocol/hooks/useProductionTimer';
 import { useSollData } from './protocol/hooks/useSollData';
@@ -97,28 +97,31 @@ const ProtocolScreen = () => {
 
     const line = payload?.linie || shiftData?.selectedLine;
     const bereich = payload?.bereich || shiftData?.selectedBereich || null;
-    const target = await getSensorUrlForLine(line, bereich);
-    console.warn('[PI context] CALL', { reason, target, payload: enrichedPayload });
-    if (!target) {
-      console.warn('[PI context] ABORTED: no target for PI context');
+    const targets = await getSensorUrlsForLine(line, bereich);
+    console.warn('[PI context] CALL', { reason, targets, payload: enrichedPayload });
+    if (!targets?.length) {
+      console.warn('[PI context] ABORTED: no targets for PI context');
       return;
     }
-    try {
-      console.warn(`[PI context] POST ${target}/context`);
-      const res = await fetch(`${target}/context`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(enrichedPayload),
-      });
-      if (!res.ok) {
-        const msg = await res.text();
-        console.warn(`[PI context] ${reason} HTTP ${res.status}: ${msg}`);
-      } else {
-        console.warn(`[PI context] ${reason} OK`);
+
+    await Promise.all(targets.map(async (target) => {
+      try {
+        console.warn(`[PI context] POST ${target}/context`);
+        const res = await fetch(`${target}/context`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(enrichedPayload),
+        });
+        if (!res.ok) {
+          const msg = await res.text();
+          console.warn(`[PI context] ${reason} ${target} HTTP ${res.status}: ${msg}`);
+        } else {
+          console.warn(`[PI context] ${reason} ${target} OK`);
+        }
+      } catch (e) {
+        console.warn(`[PI context] ${reason} ${target} failed:`, e.message);
       }
-    } catch (e) {
-      console.warn(`[PI context] ${reason} failed:`, e.message);
-    }
+    }));
   };
 
   // Persist FA whenever it changes — skip the very first render (null initial state)
@@ -583,9 +586,39 @@ const ProtocolScreen = () => {
 
   //  Schicht beenden 
   const handleEnde = async () => {
+    const lineForReset = shiftData.selectedLine;
+    const shiftForReset = shiftData.selectedShift;
+    const bereichForReset = shiftData.selectedBereich;
+    const sessionRunKeyForReset = (() => {
+      const base = timer?.productionStartTime?.current || timer?.mainTimerStartTime?.current;
+      if (!base) return null;
+      const baseKey = new Date(Number(base)).toISOString().slice(0, 19).replace('T', ' ');
+      return bereichForReset ? `${baseKey}::${bereichForReset}` : baseKey;
+    })();
+
     // Erst alle aktuellen Werte (elapsed, pause, IST) final in die DB schreiben,
     // damit die Statistik später exakte Schichtdaten bekommt.
     await dbSync.syncSession();
+
+    // IST für den beendeten Auftrag explizit zurücksetzen.
+    try {
+      const datum = new Date().toISOString().slice(0, 10);
+      await fetch('https://cosmetic-service.com/php-api/produktion/ist.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          linie: lineForReset || null,
+          schicht: shiftForReset || null,
+          bereich: bereichForReset || null,
+          datum,
+          session_run_key: sessionRunKeyForReset,
+          ist: 0,
+        }),
+      });
+    } catch (e) {
+      console.warn('[ProtocolScreen] IST reset beim Auftragsende fehlgeschlagen:', e.message);
+    }
+
     // Dann running=0 setzen (DELETE) – Zeile bleibt als Historien-Protokoll erhalten.
     await dbSync.stopSession();
     // Kontext beim Pi löschen (optional)

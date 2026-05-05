@@ -10,15 +10,16 @@ export const API_BASE_URL = USE_LOCALHOST
   : 'http://192.168.10.152:3001/api';
 
 // Sensor mapping per Linie/Bereich
+// Werte können ein String (ein Sensor) oder ein Array (mehrere Sensoren) sein.
 // Linie 1 -> sensor1.local (Produktiv Pi)
-// Linie 2 -> Bereichsabhängig: Abfüllung / Verpackung
+// Linie 2 -> Bereichsabhängig: Abfüllung / Verpackung (Verpackung hat 2 Sensoren)
 // Linie 3 -> Testsensor localhost:5003
 const SENSOR_MAPPING = {
   'Linie 1': 'http://sensor1.local:3000',
   'Linie 2': {
     default: 'http://localhost:5002',
     Abfüllung: 'http://localhost:5002',
-    Verpackung: 'http://localhost:5004',
+    Verpackung: ['http://localhost:5004', 'http://localhost:5005'],
   },
   'Linie 3': 'http://localhost:5003',
 };
@@ -38,31 +39,48 @@ export const resolveMdnsHost = async (rawUrl, timeout = 2000) => {
 
     const u = new URL(rawUrl);
     const hostname = u.hostname; // e.g. sensor1.local
-    const serviceType = '_http._tcp.';
+    // Nur der Gerätename (ohne .local), zum Abgleich mit Bonjour host/name
+    const wantedLabel = String(hostname || '')
+      .replace(/\.local\.?$/i, '')
+      .toLowerCase();
+
+    const serviceMatchesWantedHost = (service) => {
+      if (!wantedLabel) return true;
+      const h = String(service?.host || '').replace(/\.$/, '').toLowerCase();
+      const n = String(service?.name || '').toLowerCase();
+      return (
+        h === `${wantedLabel}.local` ||
+        h.startsWith(`${wantedLabel}.`) ||
+        n.includes(wantedLabel)
+      );
+    };
 
     return await new Promise((resolve) => {
       let resolved = null;
-      const onResolved = (serviceName, service) => {
+      // react-native-zeroconf: emit('resolved', service) — genau EIN Argument
+      const onResolved = (service) => {
         try {
-          // service.name or service.host may contain the hostname
-          if (!service) return;
+          if (!service || !serviceMatchesWantedHost(service)) return;
           const hosts = service.addresses || (service.host ? [service.host] : []);
           if (hosts && hosts.length) {
             const ip = hosts.find(h => h && h.indexOf(':') === -1) || hosts[0];
             if (ip) {
               resolved = `http://${ip}:${service.port || u.port || 80}`;
               resolve(resolved);
-              zeroconf.removeListener('resolved', onResolved);
+              try { zeroconf.removeListener('resolved', onResolved); } catch (e) {}
+              try { zeroconf.stop(); } catch (e) {}
             }
           }
         } catch (_) {}
       };
 
       zeroconf.on('resolved', onResolved);
-      zeroconf.scan(serviceType, 'local.');
+      // API: scan(type='http', protocol='tcp', domain='local.')
+      zeroconf.scan('http', 'tcp', 'local.');
 
       setTimeout(() => {
         try { zeroconf.removeListener('resolved', onResolved); } catch (e) {}
+        try { zeroconf.stop(); } catch (e) {}
         if (!resolved) resolve(null);
       }, timeout);
     });
@@ -73,20 +91,30 @@ export const resolveMdnsHost = async (rawUrl, timeout = 2000) => {
 };
 
 export const getSensorUrlForLine = async (line, bereich = null) => {
-  if (!line) return DEFAULT_PI_SERVER;
+  const urls = await getSensorUrlsForLine(line, bereich);
+  return urls[0] || DEFAULT_PI_SERVER;
+};
+
+export const getSensorUrlsForLine = async (line, bereich = null) => {
+  if (!line) return [DEFAULT_PI_SERVER];
   const mapped = SENSOR_MAPPING[line];
-  if (!mapped) return DEFAULT_PI_SERVER;
+  if (!mapped) return [DEFAULT_PI_SERVER];
 
   const resolvedMapping = typeof mapped === 'object'
     ? (bereich && mapped[bereich]) || mapped.default || DEFAULT_PI_SERVER
     : mapped;
 
-  // Attempt mDNS resolution only for .local hostnames
-  if (resolvedMapping.includes('.local')) {
-    const resolved = await resolveMdnsHost(resolvedMapping).catch(() => null);
-    return resolved || resolvedMapping; // if resolution failed, return original mDNS URL
-  }
-  return resolvedMapping;
+  const sensorUrls = Array.isArray(resolvedMapping) ? resolvedMapping : [resolvedMapping];
+  const resolvedUrls = await Promise.all(sensorUrls.map(async (url) => {
+    // Attempt mDNS resolution only for .local hostnames
+    if (url.includes('.local')) {
+      const resolved = await resolveMdnsHost(url).catch(() => null);
+      return resolved || url; // if resolution failed, return original mDNS URL
+    }
+    return url;
+  }));
+
+  return resolvedUrls.filter(Boolean);
 };
 
 export const SENSOR_MAPPING_CONST = SENSOR_MAPPING;
@@ -102,8 +130,13 @@ export const API_ENDPOINTS = {
   SOLL_HOURS: `${API_BASE_URL}/soll-hours`,
   TEST_IST:  `${API_BASE_URL}/test/ist`,
   // IST direkt aus IONOS-DB (kein lokaler Node-Server nötig)
-  DB_IST: (linie, schicht, datum) =>
-    `${IONOS_API_BASE}/ist.php?linie=${encodeURIComponent(linie)}&schicht=${encodeURIComponent(schicht)}&datum=${datum}`
+  DB_IST: (linie, schicht, datum, bereich = null) => {
+    let url = `${IONOS_API_BASE}/ist.php?linie=${encodeURIComponent(String(linie || ''))}&schicht=${encodeURIComponent(String(schicht || ''))}&datum=${encodeURIComponent(String(datum || ''))}`;
+    if (bereich) {
+      url += `&bereich=${encodeURIComponent(String(bereich))}`;
+    }
+    return url;
+  }
 };
 
 // API Error Messages
