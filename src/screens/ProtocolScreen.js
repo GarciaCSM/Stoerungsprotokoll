@@ -128,70 +128,102 @@ const ProtocolScreen = () => {
   const timer = useProductionTimer({ shiftData, saveStoerLog: saveStoerLogWithSync });
 
   const sendPiContext = async (payload, reason = 'unknown') => {
-    const toMysqlDatetime = (epochMs) => {
-      if (!epochMs) return null;
-      const d = new Date(Number(epochMs));
-      if (!Number.isFinite(d.getTime())) return null;
-      return d.toISOString().slice(0, 19).replace('T', ' ');
-    };
-
-    const computedSessionRunKey = toMysqlDatetime(
-      timer?.productionStartTime?.current || timer?.mainTimerStartTime?.current
-    );
-    const makeSessionRunKey = (baseKey, bereich) => {
-      if (!baseKey) return null;
-      if (!bereich) return baseKey;
-      return `${baseKey}::${bereich}`;
-    };
-
-    const enrichedPayload = {
-      ...payload,
-      session_run_key: payload?.session_run_key || makeSessionRunKey(computedSessionRunKey, payload?.bereich || shiftData?.selectedBereich) || null,
-    };
-
-    const piPayload = {
-      ...enrichedPayload,
-      fa_nr:
-        enrichedPayload.fa_nr != null && enrichedPayload.fa_nr !== ''
-          ? String(enrichedPayload.fa_nr)
-          : enrichedPayload.fa_nr,
-    };
-
-    let body;
+    // Komplette Funktion in äußerem try/catch – verhindert jegliche
+    // unhandled rejection, die im Release-APK zum Absturz führen würde.
     try {
-      body = JSON.stringify(piPayload);
-    } catch (e) {
-      console.warn('[PI context] JSON.stringify fehlgeschlagen', reason, e.message);
-      return;
-    }
+      const toMysqlDatetime = (epochMs) => {
+        try {
+          if (!epochMs) return null;
+          const d = new Date(Number(epochMs));
+          if (!Number.isFinite(d.getTime())) return null;
+          return d.toISOString().slice(0, 19).replace('T', ' ');
+        } catch (_) { return null; }
+      };
 
-    const line = payload?.linie || shiftData?.selectedLine;
-    const bereich = payload?.bereich || shiftData?.selectedBereich || null;
-    const targets = await getSensorUrlsForLine(line, bereich);
-    console.warn('[PI context] CALL', { reason, targets, payload: piPayload });
-    if (!targets?.length) {
-      console.warn('[PI context] ABORTED: no targets for PI context');
-      return;
-    }
+      const computedSessionRunKey = toMysqlDatetime(
+        timer?.productionStartTime?.current || timer?.mainTimerStartTime?.current
+      );
+      const makeSessionRunKey = (baseKey, bereich) => {
+        if (!baseKey) return null;
+        if (!bereich) return baseKey;
+        return `${baseKey}::${bereich}`;
+      };
 
-    await Promise.all(targets.map(async (target) => {
+      const enrichedPayload = {
+        ...(payload || {}),
+        session_run_key:
+          (payload && payload.session_run_key) ||
+          makeSessionRunKey(computedSessionRunKey, (payload && payload.bereich) || shiftData?.selectedBereich) ||
+          null,
+      };
+
+      const piPayload = {
+        ...enrichedPayload,
+        fa_nr:
+          enrichedPayload.fa_nr != null && enrichedPayload.fa_nr !== ''
+            ? String(enrichedPayload.fa_nr)
+            : enrichedPayload.fa_nr,
+      };
+
+      let body;
       try {
-        console.warn(`[PI context] POST ${target}/context`);
-        const res = await fetch(`${target}/context`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json; charset=utf-8' },
-          body,
-        });
-        if (!res.ok) {
-          const msg = await res.text();
-          console.warn(`[PI context] ${reason} ${target} HTTP ${res.status}: ${msg}`);
-        } else {
-          console.warn(`[PI context] ${reason} ${target} OK`);
-        }
+        body = JSON.stringify(piPayload);
       } catch (e) {
-        console.warn(`[PI context] ${reason} ${target} failed:`, e.message);
+        console.warn('[PI context] JSON.stringify fehlgeschlagen', reason, e?.message);
+        return;
       }
-    }));
+
+      const line = (payload && payload.linie) || shiftData?.selectedLine;
+      const bereich = (payload && payload.bereich) || shiftData?.selectedBereich || null;
+
+      let targets = [];
+      try {
+        targets = await getSensorUrlsForLine(line, bereich);
+      } catch (e) {
+        console.warn('[PI context] getSensorUrlsForLine fehlgeschlagen', reason, e?.message);
+        return;
+      }
+      console.warn('[PI context] CALL', { reason, targets, payload: piPayload });
+      if (!Array.isArray(targets) || targets.length === 0) {
+        console.warn('[PI context] ABORTED: no targets for PI context');
+        return;
+      }
+
+      // .allSettled statt .all → einzelne Rejects können niemals den
+      // Aufrufer abreißen (wichtig für Release-Hermes).
+      await Promise.allSettled(targets.map(async (target) => {
+        if (!target || typeof target !== 'string') return;
+        let timeoutId = null;
+        try {
+          console.warn(`[PI context] POST ${target}/context`);
+          const controller = new AbortController();
+          timeoutId = setTimeout(() => {
+            try { controller.abort(); } catch (_) {}
+          }, 5000);
+          const res = await fetch(`${target}/context`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json; charset=utf-8' },
+            body,
+            signal: controller.signal,
+          });
+          if (!res.ok) {
+            let msg = '';
+            try { msg = await res.text(); } catch (_) { msg = '<no body>'; }
+            console.warn(`[PI context] ${reason} ${target} HTTP ${res.status}: ${msg}`);
+          } else {
+            console.warn(`[PI context] ${reason} ${target} OK`);
+          }
+        } catch (e) {
+          console.warn(`[PI context] ${reason} ${target} failed:`, e?.message);
+        } finally {
+          if (timeoutId != null) {
+            try { clearTimeout(timeoutId); } catch (_) {}
+          }
+        }
+      }));
+    } catch (e) {
+      console.warn('[PI context] OUTER catch', reason, e?.message);
+    }
   };
 
   // useSollData vor useDbSync – damit istValue beim Sync verfügbar ist
@@ -424,28 +456,40 @@ const ProtocolScreen = () => {
   };
 
   const handleSelectFA = async (fa) => {
-    const newFA = { FANr: fa.FANr, ArtikelNr: fa.ArtikelNr, Artikelbezeichnung: fa.Artikelbezeichnung };
+    const rawFanr = fa.FANr != null && fa.FANr !== '' ? fa.FANr : fa.fanr;
+    const newFA = {
+      FANr: rawFanr,
+      ArtikelNr: fa.ArtikelNr ?? fa.artikel_nr ?? '',
+      Artikelbezeichnung: fa.Artikelbezeichnung ?? fa.artikel_bezeichnung ?? '',
+    };
     setSelectedFA(newFA);
     setFaSearchText(''); setFaSearchResults([]); setFaSearchError('');
 
-    // Pi-Server über neue FA und aktuellen Kontext informieren
-    sendPiContext({
-      linie:  shiftData.selectedLine  || null,
-      schicht: shiftData.selectedShift || null,
-      bereich: localBereich || null,
-      fa_nr:   fa.FANr,
+    const liniePi = shiftData?.selectedLine ?? localLine ?? null;
+    const schichtPi = shiftData?.selectedShift ?? localShift ?? null;
+    const bereichPi = shiftData?.selectedBereich ?? localBereich ?? null;
+
+    // Pi-Server über neue FA und aktuellen Kontext informieren (await: vermeidet Race mit
+    // einem noch ausstehenden confirm-selection-changed POST mit fa_nr:null).
+    await sendPiContext({
+      linie: liniePi,
+      schicht: schichtPi,
+      bereich: bereichPi,
+      fa_nr: rawFanr,
     }, 'fa-selected');
 
     // Prüfe ob für diese FA heute auf dieser Linie/Schicht eine Session gespeichert ist.
     // Falls ja → Brutto-Start, Netto-Zeit, Pausen, IST-Stk wiederherstellen (selbe Produktion).
     // Falls eine andere FA gespeichert ist → Timer zurücksetzen (neue Produktion).
     if (!shiftData?.selectedLine || !shiftData?.selectedShift) return;
+    const fanrKey = rawFanr != null ? String(rawFanr) : '';
     try {
       const { session, stoerungen } = await dbSync.loadFromDb();
-      if (session && session.fa_nr === fa.FANr) {
+      const sessFa = session?.fa_nr != null ? String(session.fa_nr) : '';
+      if (session && sessFa && fanrKey && sessFa === fanrKey) {
         // Gleiche FA wie in DB → alles wiederherstellen
         await timer.applyRemoteSession(session);
-      } else if (session && session.fa_nr && session.fa_nr !== fa.FANr) {
+      } else if (session && sessFa && fanrKey && sessFa !== fanrKey) {
         // Andere FA war gespeichert → neuer Produktionslauf → Timer zurücksetzen
         await timer.resetTimer();
       }
@@ -454,7 +498,7 @@ const ProtocolScreen = () => {
       // Störungen für diese FA laden (DB + AsyncStorage) – bereits per FA gefiltert
       if (Array.isArray(stoerungen) && stoerungen.length) {
         const incoming = stoerungen
-          .filter(s => s.fa_nr === fa.FANr)
+          .filter(s => s.fa_nr != null && String(s.fa_nr) === fanrKey)
           .map(s => ({
             id: s.id || Date.now(),
             type: 'störung',
@@ -474,7 +518,7 @@ const ProtocolScreen = () => {
         setLocalLogsFromServer(incoming);
       } else {
         // Keine DB-Störungen für diese FA → aus AsyncStorage laden (FA-gefiltert via hook)
-        loadLocalLogs(shiftData.selectedLine, shiftData.selectedShift, fa.FANr);
+        loadLocalLogs(shiftData.selectedLine, shiftData.selectedShift, rawFanr);
       }
     } catch (e) {
       console.warn('[handleSelectFA] DB-Session-Lookup fehlgeschlagen:', e.message);
@@ -535,7 +579,8 @@ const ProtocolScreen = () => {
       setLineLocked(true); setSelectionConfirmed(true);
 
       // inform Pi‑Server über aktualisierte Linie/Schicht/Bereich/FA
-      sendPiContext(
+      // await: sonst kann ein langsames POST noch nach FA-Auswahl ankommen und fa_nr:null setzen.
+      await sendPiContext(
         { linie: localLine, schicht: localShift, bereich: localBereich, fa_nr: selectedFA?.FANr || null },
         'confirm-selection-changed'
       );

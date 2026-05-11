@@ -48,7 +48,7 @@
     "react-dom": "18.2.0",
     "react-native": "0.71.14",
     "react-native-web": "~0.18.10",
-    "react-native-zeroconf": "github:balthazar/react-native-zeroconf",
+    "react-native-zeroconf": "^0.14.0",
     "xlsx": "0.18.5"
   },
   "devDependencies": {

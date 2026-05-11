@@ -181,7 +181,7 @@ Wegen Leerzeichen im Pfad (`…\VS Code\…`): zuerst **`map-projekt-als-s.bat`*
 
 APK: `S:\android\app\build\outputs\apk\release\app-release.apk`
 
-Install: `adb -s "Gerätename bei mehreren Geräten" install -r` und Pfad zur APK.
+Install: `adb install -r "S:\android\app\build\outputs\apk\release\app-release.apk"`
 
 ## 14. Lizenz
 

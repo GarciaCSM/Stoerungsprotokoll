@@ -12,14 +12,14 @@ export const API_BASE_URL = USE_LOCALHOST
 // Sensor mapping per Linie/Bereich
 // Werte können ein String (ein Sensor) oder ein Array (mehrere Sensoren) sein.
 // Linie 1 -> sensor1.local (Produktiv Pi)
-// Linie 2 -> Bereichsabhängig: Abfüllung / Verpackung (Verpackung hat 2 Sensoren)
+// Linie 2 -> Bereichsabhängig: Abfüllung / Verpackung (Pi 2 = feste IP)
 // Linie 3 -> Testsensor localhost:5003
 const SENSOR_MAPPING = {
   'Linie 1': 'http://sensor1.local:3000',
   'Linie 2': {
     default: 'http://localhost:5002',
     Abfüllung: 'http://sensor1.local:3000',
-    Verpackung: ['http://localhost:5004', 'http://localhost:5005'],
+    Verpackung: ['http://192.168.2.53:3000'],
   },
   'Linie 3': 'http://localhost:5003',
 };
@@ -27,19 +27,44 @@ const SENSOR_MAPPING = {
 // Fallback URL (keep existing behaviour)
 const DEFAULT_PI_SERVER = 'http://sensor1.local:3000';
 
-// Try to resolve mDNS hostnames on-device using react-native-zeroconf.
-// If the native module is not installed or resolution fails, we fall back
-// to the static mapping above. This function returns the resolved URL
-// (string) or the fallback mapping.
-export const resolveMdnsHost = async (rawUrl, timeout = 2000) => {
+/**
+ * Feste IPs, wenn `sensorX.local` im Tablet-WLAN nicht aufgelöst wird.
+ * Keys = Hostname aus der URL (case-insensitive). Produktion: echte Pi-IPs eintragen.
+ */
+export const SENSOR_HOST_OVERRIDES = {
+  // 'sensor1.local': '192.168.10.40',
+  // optional, falls wieder Hostname-URL: 'csm-pi-2.local': '192.168.2.53',
+};
+
+function applySensorHostOverride(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
   try {
-    // Dynamic import so web builds don't fail.
+    const u = new URL(rawUrl);
+    const ip = SENSOR_HOST_OVERRIDES[u.hostname.toLowerCase()];
+    if (ip && String(ip).trim()) {
+      const next = new URL(rawUrl);
+      next.hostname = String(ip).trim();
+      return next.href.replace(/\/$/, '');
+    }
+  } catch (_) { /* ignore */ }
+  return rawUrl;
+}
+
+// Zeroconf: npm-Paket react-native-zeroconf@0.14.x (mit dist/). Bei Problemen
+// SENSOR_HOST_OVERRIDES nutzen oder ENABLE_ZEROCONF = false (nur natives .local).
+const ENABLE_ZEROCONF = true;
+
+export const resolveMdnsHost = async (rawUrl, timeout = 4000) => {
+  if (!ENABLE_ZEROCONF) return null;
+
+  try {
     const Zeroconf = require('react-native-zeroconf');
-    const zeroconf = new Zeroconf();
+    const ZeroconfClass = (Zeroconf && Zeroconf.default) || Zeroconf;
+    if (typeof ZeroconfClass !== 'function') return null;
+    const zeroconf = new ZeroconfClass();
 
     const u = new URL(rawUrl);
-    const hostname = u.hostname; // e.g. sensor1.local
-    // Nur der Gerätename (ohne .local), zum Abgleich mit Bonjour host/name
+    const hostname = u.hostname;
     const wantedLabel = String(hostname || '')
       .replace(/\.local\.?$/i, '')
       .toLowerCase();
@@ -57,7 +82,6 @@ export const resolveMdnsHost = async (rawUrl, timeout = 2000) => {
 
     return await new Promise((resolve) => {
       let resolved = null;
-      // react-native-zeroconf: emit('resolved', service) — genau EIN Argument
       const onResolved = (service) => {
         try {
           if (!service || !serviceMatchesWantedHost(service)) return;
@@ -75,7 +99,6 @@ export const resolveMdnsHost = async (rawUrl, timeout = 2000) => {
       };
 
       zeroconf.on('resolved', onResolved);
-      // API: scan(type='http', protocol='tcp', domain='local.')
       zeroconf.scan('http', 'tcp', 'local.');
 
       setTimeout(() => {
@@ -85,10 +108,20 @@ export const resolveMdnsHost = async (rawUrl, timeout = 2000) => {
       }, timeout);
     });
   } catch (e) {
-    // Native module not available or error — caller should fallback
     return null;
   }
 };
+
+/** Override (.local → IP) + optional Zeroconf für eine Sensor-URL. */
+async function finalizeSensorUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  let u = applySensorHostOverride(url);
+  if (u.includes('.local')) {
+    const resolved = await resolveMdnsHost(u).catch(() => null);
+    u = resolved || u;
+  }
+  return u;
+}
 
 export const getSensorUrlForLine = async (line, bereich = null) => {
   const urls = await getSensorUrlsForLine(line, bereich);
@@ -96,25 +129,32 @@ export const getSensorUrlForLine = async (line, bereich = null) => {
 };
 
 export const getSensorUrlsForLine = async (line, bereich = null) => {
-  if (!line) return [DEFAULT_PI_SERVER];
-  const mapped = SENSOR_MAPPING[line];
-  if (!mapped) return [DEFAULT_PI_SERVER];
-
-  const resolvedMapping = typeof mapped === 'object'
-    ? (bereich && mapped[bereich]) || mapped.default || DEFAULT_PI_SERVER
-    : mapped;
-
-  const sensorUrls = Array.isArray(resolvedMapping) ? resolvedMapping : [resolvedMapping];
-  const resolvedUrls = await Promise.all(sensorUrls.map(async (url) => {
-    // Attempt mDNS resolution only for .local hostnames
-    if (url.includes('.local')) {
-      const resolved = await resolveMdnsHost(url).catch(() => null);
-      return resolved || url; // if resolution failed, return original mDNS URL
+  try {
+    if (!line) {
+      const u = await finalizeSensorUrl(DEFAULT_PI_SERVER);
+      return [u || DEFAULT_PI_SERVER];
     }
-    return url;
-  }));
+    const mapped = SENSOR_MAPPING[line];
+    if (!mapped) {
+      const u = await finalizeSensorUrl(DEFAULT_PI_SERVER);
+      return [u || DEFAULT_PI_SERVER];
+    }
 
-  return resolvedUrls.filter(Boolean);
+    const resolvedMapping = typeof mapped === 'object'
+      ? (bereich && mapped[bereich]) || mapped.default || DEFAULT_PI_SERVER
+      : mapped;
+
+    const sensorUrls = Array.isArray(resolvedMapping) ? resolvedMapping : [resolvedMapping];
+    const resolvedUrls = await Promise.all(
+      sensorUrls.map((url) => finalizeSensorUrl(typeof url === 'string' ? url : null))
+    );
+
+    return resolvedUrls.filter(Boolean);
+  } catch (e) {
+    console.warn('[getSensorUrlsForLine] failed:', e?.message);
+    const u = await finalizeSensorUrl(DEFAULT_PI_SERVER);
+    return [u || DEFAULT_PI_SERVER];
+  }
 };
 
 export const SENSOR_MAPPING_CONST = SENSOR_MAPPING;

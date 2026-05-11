@@ -1,14 +1,28 @@
 import { API_ENDPOINTS, API_ERROR_MESSAGES } from '../config/apiConfig';
 
-/** Wie excelService.fetchSollFromServer: Emulator / Geräte-Hosts. */
+/**
+ * Erzeugt Host-Varianten nur für lokale Node-URLs (Emulator/Gerät).
+ * Für IONOS-URLs (oder andere remote-Hosts) wird genau EIN Kandidat
+ * zurückgegeben – verhindert mehrfaches Treffen desselben WP-Defender-
+ * Counters, der die IP sonst sperrt.
+ */
 function expandUrlCandidates(url) {
   if (!url) return [];
-  return [
+  if (!url.includes('192.168.10.152')) {
+    return [url];
+  }
+  const variants = [
     url,
     url.replace('192.168.10.152', '10.0.2.2'),
     url.replace('192.168.10.152', '10.0.3.2'),
     url.replace('192.168.10.152', '127.0.0.1'),
   ];
+  return [...new Set(variants)];
+}
+
+/** True für 4xx-Antworten (außer 404) – diese wiederholen wir nicht. */
+function isFatalHttp(status) {
+  return status >= 400 && status < 500 && status !== 404;
 }
 
 class FAService {
@@ -28,8 +42,9 @@ class FAService {
     ].filter(Boolean);
     const tried = [];
     let lastErr = null;
+    let fatalStatus = null;
 
-    for (const base of bases) {
+    outer: for (const base of bases) {
       for (const root of expandUrlCandidates(base)) {
         const url = `${root}?query=${encodeURIComponent(query)}`;
         try {
@@ -37,6 +52,12 @@ class FAService {
           if (!response.ok) {
             lastErr = new Error(`HTTP ${response.status}: ${response.statusText}`);
             tried.push({ url, status: response.status });
+            // 4xx (außer 404) → kein erneuter Retry auf denselben/anderen
+            // Host. Verhindert Lockout-Verstärkung durch WP-Defender.
+            if (isFatalHttp(response.status)) {
+              fatalStatus = response.status;
+              break outer;
+            }
             continue;
           }
           return await response.json();
@@ -52,13 +73,19 @@ class FAService {
     const net =
       lastErr &&
       String(lastErr.message || lastErr).toLowerCase().includes('network');
+    let errorMsg;
+    if (fatalStatus === 403) {
+      errorMsg = 'IONOS-Server hat den Zugriff blockiert (HTTP 403). Bitte WP-Defender entsperren.';
+    } else if (fatalStatus) {
+      errorMsg = `IONOS-Server: HTTP ${fatalStatus}`;
+    } else {
+      errorMsg = net ? API_ERROR_MESSAGES.NETWORK_ERROR : API_ERROR_MESSAGES.GENERAL_ERROR;
+    }
     return {
       success: false,
       results: [],
       count: 0,
-      error: net
-        ? API_ERROR_MESSAGES.NETWORK_ERROR
-        : API_ERROR_MESSAGES.GENERAL_ERROR,
+      error: errorMsg,
     };
   }
 
@@ -77,6 +104,7 @@ class FAService {
     const unique = [...new Set(candidates)];
 
     let lastErr = null;
+    let fatalStatus = null;
 
     for (const url of unique) {
       try {
@@ -90,6 +118,10 @@ class FAService {
           continue;
         }
         lastErr = new Error(`HTTP ${response.status}: ${response.statusText}`);
+        if (isFatalHttp(response.status)) {
+          fatalStatus = response.status;
+          break;
+        }
       } catch (error) {
         lastErr = error;
         console.warn('Get FA fetch failed:', url, error.message || error);
@@ -104,12 +136,15 @@ class FAService {
     const net =
       lastErr &&
       String(lastErr.message || lastErr).toLowerCase().includes('network');
-    return {
-      success: false,
-      error: net
-        ? API_ERROR_MESSAGES.NETWORK_ERROR
-        : API_ERROR_MESSAGES.GENERAL_ERROR,
-    };
+    let errorMsg;
+    if (fatalStatus === 403) {
+      errorMsg = 'IONOS-Server hat den Zugriff blockiert (HTTP 403). Bitte WP-Defender entsperren.';
+    } else if (fatalStatus) {
+      errorMsg = `IONOS-Server: HTTP ${fatalStatus}`;
+    } else {
+      errorMsg = net ? API_ERROR_MESSAGES.NETWORK_ERROR : API_ERROR_MESSAGES.GENERAL_ERROR;
+    }
+    return { success: false, error: errorMsg };
   }
 
   /**
