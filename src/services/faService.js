@@ -1,5 +1,16 @@
 import { API_ENDPOINTS, API_ERROR_MESSAGES } from '../config/apiConfig';
 
+/** Wie excelService.fetchSollFromServer: Emulator / Geräte-Hosts. */
+function expandUrlCandidates(url) {
+  if (!url) return [];
+  return [
+    url,
+    url.replace('192.168.10.152', '10.0.2.2'),
+    url.replace('192.168.10.152', '10.0.3.2'),
+    url.replace('192.168.10.152', '127.0.0.1'),
+  ];
+}
+
 class FAService {
   /**
    * Search for FA-Koepfe by FANr
@@ -11,28 +22,44 @@ class FAService {
       return { success: true, results: [], count: 0 };
     }
 
-    try {
-      const url = `${API_ENDPOINTS.SEARCH_FA}?query=${encodeURIComponent(query)}`;
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    const bases = [
+      API_ENDPOINTS.SEARCH_FA,
+      API_ENDPOINTS.SEARCH_FA_FALLBACK,
+    ].filter(Boolean);
+    const tried = [];
+    let lastErr = null;
+
+    for (const base of bases) {
+      for (const root of expandUrlCandidates(base)) {
+        const url = `${root}?query=${encodeURIComponent(query)}`;
+        try {
+          const response = await fetch(url);
+          if (!response.ok) {
+            lastErr = new Error(`HTTP ${response.status}: ${response.statusText}`);
+            tried.push({ url, status: response.status });
+            continue;
+          }
+          return await response.json();
+        } catch (error) {
+          lastErr = error;
+          tried.push({ url, message: error.message || String(error) });
+          console.warn('FA Search fetch failed:', url, error.message || error);
+        }
       }
-      
-      const data = await response.json();
-      return data;
-      
-    } catch (error) {
-      console.error('FA Search error:', error);
-      return {
-        success: false,
-        results: [],
-        count: 0,
-        error: error.message.includes('Network')
-          ? API_ERROR_MESSAGES.NETWORK_ERROR
-          : API_ERROR_MESSAGES.GENERAL_ERROR,
-      };
     }
+
+    console.error('FA Search error (all candidates):', lastErr, tried);
+    const net =
+      lastErr &&
+      String(lastErr.message || lastErr).toLowerCase().includes('network');
+    return {
+      success: false,
+      results: [],
+      count: 0,
+      error: net
+        ? API_ERROR_MESSAGES.NETWORK_ERROR
+        : API_ERROR_MESSAGES.GENERAL_ERROR,
+    };
   }
 
   /**
@@ -41,32 +68,48 @@ class FAService {
    * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
    */
   async getFAByNumber(fanr) {
-    try {
-      const url = API_ENDPOINTS.GET_FA(fanr);
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        if (response.status === 404) {
-          return {
-            success: false,
-            error: API_ERROR_MESSAGES.FA_NOT_FOUND,
-          };
+    const candidates = [
+      ...expandUrlCandidates(API_ENDPOINTS.GET_FA(fanr)),
+      ...(API_ENDPOINTS.GET_FA_FALLBACK
+        ? expandUrlCandidates(API_ENDPOINTS.GET_FA_FALLBACK(fanr))
+        : []),
+    ];
+    const unique = [...new Set(candidates)];
+
+    let lastErr = null;
+
+    for (const url of unique) {
+      try {
+        const response = await fetch(url);
+
+        if (response.ok) {
+          return await response.json();
         }
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        if (response.status === 404) {
+          lastErr = { type: 'notfound' };
+          continue;
+        }
+        lastErr = new Error(`HTTP ${response.status}: ${response.statusText}`);
+      } catch (error) {
+        lastErr = error;
+        console.warn('Get FA fetch failed:', url, error.message || error);
       }
-      
-      const data = await response.json();
-      return data;
-      
-    } catch (error) {
-      console.error('Get FA error:', error);
-      return {
-        success: false,
-        error: error.message.includes('Network')
-          ? API_ERROR_MESSAGES.NETWORK_ERROR
-          : API_ERROR_MESSAGES.GENERAL_ERROR,
-      };
     }
+
+    if (lastErr && lastErr.type === 'notfound') {
+      return { success: false, error: API_ERROR_MESSAGES.FA_NOT_FOUND };
+    }
+
+    console.error('Get FA error:', lastErr);
+    const net =
+      lastErr &&
+      String(lastErr.message || lastErr).toLowerCase().includes('network');
+    return {
+      success: false,
+      error: net
+        ? API_ERROR_MESSAGES.NETWORK_ERROR
+        : API_ERROR_MESSAGES.GENERAL_ERROR,
+    };
   }
 
   /**
@@ -74,14 +117,23 @@ class FAService {
    * @returns {Promise<boolean>}
    */
   async checkHealth() {
-    try {
-      const response = await fetch(API_ENDPOINTS.HEALTH);
-      const data = await response.json();
-      return data.status === 'ok';
-    } catch (error) {
-      console.error('Health check failed:', error);
-      return false;
+    const urls = [
+      ...expandUrlCandidates(API_ENDPOINTS.HEALTH),
+      ...(API_ENDPOINTS.HEALTH_FALLBACK
+        ? expandUrlCandidates(API_ENDPOINTS.HEALTH_FALLBACK)
+        : []),
+    ];
+    const unique = [...new Set(urls)];
+    for (const url of unique) {
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.status === 'ok') return true;
+      } catch (error) {
+        console.warn('Health check failed:', url, error.message || error);
+      }
     }
+    return false;
   }
 
   /**

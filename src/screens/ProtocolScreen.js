@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { toIsoUtcOrNow } from '../utils/dateSafe';
 import { View, Text, ScrollView, TouchableOpacity, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ConfirmModal from '../components/ConfirmModal';
@@ -75,55 +76,6 @@ const ProtocolScreen = () => {
     return `selected_fa:${line}:${shift}:${st}`;
   };
 
-  const sendPiContext = async (payload, reason = 'unknown') => {
-    const toMysqlDatetime = (epochMs) => {
-      if (!epochMs) return null;
-      return new Date(Number(epochMs)).toISOString().slice(0, 19).replace('T', ' ');
-    };
-
-    const computedSessionRunKey = toMysqlDatetime(
-      timer?.productionStartTime?.current || timer?.mainTimerStartTime?.current
-    );
-    const makeSessionRunKey = (baseKey, bereich) => {
-      if (!baseKey) return null;
-      if (!bereich) return baseKey;
-      return `${baseKey}::${bereich}`;
-    };
-
-    const enrichedPayload = {
-      ...payload,
-      session_run_key: payload?.session_run_key || makeSessionRunKey(computedSessionRunKey, payload?.bereich || shiftData?.selectedBereich) || null,
-    };
-
-    const line = payload?.linie || shiftData?.selectedLine;
-    const bereich = payload?.bereich || shiftData?.selectedBereich || null;
-    const targets = await getSensorUrlsForLine(line, bereich);
-    console.warn('[PI context] CALL', { reason, targets, payload: enrichedPayload });
-    if (!targets?.length) {
-      console.warn('[PI context] ABORTED: no targets for PI context');
-      return;
-    }
-
-    await Promise.all(targets.map(async (target) => {
-      try {
-        console.warn(`[PI context] POST ${target}/context`);
-        const res = await fetch(`${target}/context`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(enrichedPayload),
-        });
-        if (!res.ok) {
-          const msg = await res.text();
-          console.warn(`[PI context] ${reason} ${target} HTTP ${res.status}: ${msg}`);
-        } else {
-          console.warn(`[PI context] ${reason} ${target} OK`);
-        }
-      } catch (e) {
-        console.warn(`[PI context] ${reason} ${target} failed:`, e.message);
-      }
-    }));
-  };
-
   // Persist FA whenever it changes — skip the very first render (null initial state)
   // to avoid overwriting the stored value before the restore effect reads it
   useEffect(() => {
@@ -175,6 +127,73 @@ const ProtocolScreen = () => {
 
   const timer = useProductionTimer({ shiftData, saveStoerLog: saveStoerLogWithSync });
 
+  const sendPiContext = async (payload, reason = 'unknown') => {
+    const toMysqlDatetime = (epochMs) => {
+      if (!epochMs) return null;
+      const d = new Date(Number(epochMs));
+      if (!Number.isFinite(d.getTime())) return null;
+      return d.toISOString().slice(0, 19).replace('T', ' ');
+    };
+
+    const computedSessionRunKey = toMysqlDatetime(
+      timer?.productionStartTime?.current || timer?.mainTimerStartTime?.current
+    );
+    const makeSessionRunKey = (baseKey, bereich) => {
+      if (!baseKey) return null;
+      if (!bereich) return baseKey;
+      return `${baseKey}::${bereich}`;
+    };
+
+    const enrichedPayload = {
+      ...payload,
+      session_run_key: payload?.session_run_key || makeSessionRunKey(computedSessionRunKey, payload?.bereich || shiftData?.selectedBereich) || null,
+    };
+
+    const piPayload = {
+      ...enrichedPayload,
+      fa_nr:
+        enrichedPayload.fa_nr != null && enrichedPayload.fa_nr !== ''
+          ? String(enrichedPayload.fa_nr)
+          : enrichedPayload.fa_nr,
+    };
+
+    let body;
+    try {
+      body = JSON.stringify(piPayload);
+    } catch (e) {
+      console.warn('[PI context] JSON.stringify fehlgeschlagen', reason, e.message);
+      return;
+    }
+
+    const line = payload?.linie || shiftData?.selectedLine;
+    const bereich = payload?.bereich || shiftData?.selectedBereich || null;
+    const targets = await getSensorUrlsForLine(line, bereich);
+    console.warn('[PI context] CALL', { reason, targets, payload: piPayload });
+    if (!targets?.length) {
+      console.warn('[PI context] ABORTED: no targets for PI context');
+      return;
+    }
+
+    await Promise.all(targets.map(async (target) => {
+      try {
+        console.warn(`[PI context] POST ${target}/context`);
+        const res = await fetch(`${target}/context`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body,
+        });
+        if (!res.ok) {
+          const msg = await res.text();
+          console.warn(`[PI context] ${reason} ${target} HTTP ${res.status}: ${msg}`);
+        } else {
+          console.warn(`[PI context] ${reason} ${target} OK`);
+        }
+      } catch (e) {
+        console.warn(`[PI context] ${reason} ${target} failed:`, e.message);
+      }
+    }));
+  };
+
   // useSollData vor useDbSync – damit istValue beim Sync verfügbar ist
   const {
     sollPerHour, anzahlArbeiter, istValue,
@@ -184,7 +203,7 @@ const ProtocolScreen = () => {
 
   // Hilfsfunktion: Session aus DB auf Timer + FA anwenden
   const applyDbSession = async (session) => {
-    if (!session) return;
+    if (!session || typeof session !== 'object' || Array.isArray(session)) return;
     await timer.applyRemoteSession(session);
     // DB gewinnt immer – FA aus Session übernehmen (überschreibt lokalen Stand)
     if (session.fa_nr) {
@@ -339,10 +358,10 @@ const ProtocolScreen = () => {
             leader: s.linienfuehrer || null,
             issue: s.stoerung_typ,
             notes: s.notiz || null,
-            startTime: new Date(s.start_time).toISOString(),
-            endTime: new Date(s.end_time).toISOString(),
+            startTime: toIsoUtcOrNow(s.start_time),
+            endTime: toIsoUtcOrNow(s.end_time),
             durationSeconds: Number(s.dauer_sekunden || 0),
-            createdAt: s.erstellt_am || new Date().toISOString(),
+            createdAt: toIsoUtcOrNow(s.erstellt_am),
           }));
 
           // Nur DB‑Störungen anzeigen (ersetze die aktuell angezeigten Logs)
@@ -447,10 +466,10 @@ const ProtocolScreen = () => {
             fa_nr: s.fa_nr,
             issue: s.stoerung_typ,
             notes: s.notiz || null,
-            startTime: new Date(s.start_time).toISOString(),
-            endTime: new Date(s.end_time).toISOString(),
+            startTime: toIsoUtcOrNow(s.start_time),
+            endTime: toIsoUtcOrNow(s.end_time),
             durationSeconds: Number(s.dauer_sekunden || 0),
-            createdAt: s.erstellt_am || new Date().toISOString(),
+            createdAt: toIsoUtcOrNow(s.erstellt_am),
           }));
         setLocalLogsFromServer(incoming);
       } else {
@@ -545,10 +564,10 @@ const ProtocolScreen = () => {
             leader: s.linienfuehrer || null,
             issue: s.stoerung_typ,
             notes: s.notiz || null,
-            startTime: new Date(s.start_time).toISOString(),
-            endTime: new Date(s.end_time).toISOString(),
+            startTime: toIsoUtcOrNow(s.start_time),
+            endTime: toIsoUtcOrNow(s.end_time),
             durationSeconds: Number(s.dauer_sekunden || 0),
-            createdAt: s.erstellt_am || new Date().toISOString(),
+            createdAt: toIsoUtcOrNow(s.erstellt_am),
           }));
           setLocalLogsFromServer(incoming);
         }
@@ -592,7 +611,9 @@ const ProtocolScreen = () => {
     const sessionRunKeyForReset = (() => {
       const base = timer?.productionStartTime?.current || timer?.mainTimerStartTime?.current;
       if (!base) return null;
-      const baseKey = new Date(Number(base)).toISOString().slice(0, 19).replace('T', ' ');
+      const d = new Date(Number(base));
+      if (!Number.isFinite(d.getTime())) return null;
+      const baseKey = d.toISOString().slice(0, 19).replace('T', ' ');
       return bereichForReset ? `${baseKey}::${bereichForReset}` : baseKey;
     })();
 

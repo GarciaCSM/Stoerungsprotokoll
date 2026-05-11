@@ -114,21 +114,21 @@ export function buildSollMap(rows, rowsArr = null, keyColumnCandidates = ['kopie
   return { sollMap, arbeitMap }; // empty
 }
 
-// Fetch mapping from backend endpoint (server reads the SharePoint/OneDrive file)
+// Fetch mapping from backend endpoint (IONOS oder lokaler Node)
 export async function fetchSollFromServer() {
   const primary = API_ENDPOINTS.SOLL_HOURS;
-  const fallbacks = [
-    primary,
-    // Android emulator default to host's localhost
-    primary.replace('192.168.10.127', '10.0.2.2'),
-    // Genymotion
-    primary.replace('192.168.10.127', '10.0.3.2'),
-    // iOS simulator / Expo on same machine
-    primary.replace('192.168.10.127', '127.0.0.1')
-  ].filter(Boolean);
+  const fallback = API_ENDPOINTS.SOLL_HOURS_FALLBACK;
+  const urls = [primary, fallback].filter(Boolean);
+  const extended = urls.flatMap((u) => [
+    u,
+    u.replace('192.168.10.152', '10.0.2.2'),
+    u.replace('192.168.10.152', '10.0.3.2'),
+    u.replace('192.168.10.152', '127.0.0.1'),
+  ]);
+  const unique = [...new Set(extended)];
 
   const errors = [];
-  for (const url of fallbacks) {
+  for (const url of unique) {
     try {
       const resp = await fetch(url, {
         headers: {
@@ -140,7 +140,6 @@ export async function fetchSollFromServer() {
       return { ok: true, mapping: payload.mapping || {}, arbeitMapping: payload.arbeitMapping || {}, source: payload.source || url };
     } catch (err) {
       errors.push({ url, message: err.message || String(err) });
-      // continue to next fallback
     }
   }
 

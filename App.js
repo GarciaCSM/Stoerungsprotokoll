@@ -5,6 +5,7 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import ProtocolScreen from './src/screens/ProtocolScreen';
 import { ShiftProvider } from './src/context/ShiftContext';
 import { BACKGROUND_SYNC_TASK } from './src/tasks/backgroundSyncTask';
+import AppErrorBoundary from './src/components/AppErrorBoundary';
 
 export default function App() {
   useEffect(() => {
@@ -26,9 +27,11 @@ export default function App() {
   }, []);
 
   return (
-    <ShiftProvider>
-      <StatusBar style="light" hidden={true} translucent={true} />
-      <ProtocolScreen onBack={() => { /* no-op: HomeScreen removed */ }} />
-    </ShiftProvider>
+    <AppErrorBoundary>
+      <ShiftProvider>
+        <StatusBar style="light" hidden={true} translucent={true} />
+        <ProtocolScreen onBack={() => { /* no-op: HomeScreen removed */ }} />
+      </ShiftProvider>
+    </AppErrorBoundary>
   );
 }

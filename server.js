@@ -5,6 +5,7 @@ require('dotenv').config();
 
 const { API_CONFIG, CORS_OPTIONS } = require('./api/config/config');
 const apiRoutes = require('./api/routes');
+const { runIonosSync } = require('./api/services/ionosSync');
 
 const app = express();
 
@@ -95,9 +96,17 @@ const server = app.listen(API_CONFIG.PORT, API_CONFIG.HOST, () => {
   } else {
     console.log('  Network URL:      <none found>');
   }
-  console.log(`  ODBC DSN:         ${API_CONFIG.ODBC_CONNECTION_STRING.split(';')[0]}`);
+  console.log(`  ODBC DSN:         ${(API_CONFIG.ODBC_CONNECTION_STRING || '').split(';')[0] || '<unset>'}`);
   console.log(`  Time:             ${new Date().toLocaleString('de-DE')}`);
   console.log('='.repeat(60));
+
+  if (API_CONFIG.SYNC_TO_IONOS_ON_START && API_CONFIG.IONOS_SYNC_BASE_URL) {
+    runIonosSync({ silent: false }).catch((e) => {
+      console.error('[IONOS-Sync] Fehler:', e.message || e);
+    });
+  } else if (API_CONFIG.SYNC_TO_IONOS_ON_START && !API_CONFIG.IONOS_SYNC_BASE_URL) {
+    console.warn('[IONOS-Sync] SYNC_TO_IONOS_ON_START ist an, aber IONOS_SYNC_BASE_URL fehlt – übersprungen.');
+  }
 });
 
 // Graceful shutdown

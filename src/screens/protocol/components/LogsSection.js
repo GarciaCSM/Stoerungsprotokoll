@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { toIsoUtcOrNow } from '../../../utils/dateSafe';
 import { MaterialIcons } from '@expo/vector-icons';
 import s from '../../../styles/ProtocolScreenStyles';
 import { THEME } from '../../../styles/globalStyles';
@@ -33,10 +34,10 @@ export default function LogsSection({
               leader: s.linienfuehrer || null,
               issue: s.stoerung_typ,
               notes: s.notiz || null,
-              startTime: new Date(s.start_time).toISOString(),
-              endTime: new Date(s.end_time).toISOString(),
+              startTime: toIsoUtcOrNow(s.start_time),
+              endTime: toIsoUtcOrNow(s.end_time),
               durationSeconds: Number(s.dauer_sekunden || 0),
-              createdAt: s.erstellt_am || new Date().toISOString(),
+              createdAt: toIsoUtcOrNow(s.erstellt_am),
             })));
           }
         } catch (e) { console.warn('DB reload after clear failed', e); }
@@ -83,6 +84,12 @@ export default function LogsSection({
                 {localLogs.map((log) => {
                   const dur = log.durationSeconds;
                   const col = dur >= 60 ? THEME.colors.dark.danger : dur >= 10 ? THEME.colors.dark.warning : THEME.colors.dark.netto;
+                  const fmtHm = (t) => {
+                    const d = new Date(t);
+                    return Number.isFinite(d.getTime())
+                      ? d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+                      : '—';
+                  };
                   return (
                     <View key={log.id} style={[s.tableRow, { flexDirection: 'row', alignItems: 'center' }]}>
                       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: col, marginRight: 12 }} />
@@ -90,8 +97,8 @@ export default function LogsSection({
                         <Text style={s.tableCell}>{log.issue}</Text>
                         {log.notes && <Text style={s.tableNote}>{log.notes}</Text>}
                       </View>
-                      <Text style={s.tableCell}>{new Date(log.startTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</Text>
-                      <Text style={s.tableCell}>{new Date(log.endTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</Text>
+                      <Text style={s.tableCell}>{fmtHm(log.startTime)}</Text>
+                      <Text style={s.tableCell}>{fmtHm(log.endTime)}</Text>
                       <Text style={[s.tableCell, { color: col, fontWeight: '600' }]}>{formatTime(dur)}</Text>
                     </View>
                   );

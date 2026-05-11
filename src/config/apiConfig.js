@@ -122,12 +122,36 @@ export const SENSOR_MAPPING_CONST = SENSOR_MAPPING;
 // IONOS PHP-API base (für IST-Wert via DB)
 export const IONOS_API_BASE = 'https://cosmetic-service.com/php-api/produktion';
 
+/** true: Tablets laden SOLL-Karte direkt von IONOS (soll_hours.php). false: lokaler Node /api/soll-hours (z. B. mit adb reverse). */
+const USE_IONOS_SOLL_HOURS = true;
+
+/** true: FA-Suche und FA-Detail von IONOS (search-fa.php, fa.php) – gleiche Logik wie Node, ohne Windows-Server. */
+const USE_IONOS_FA = true;
+
 // API Endpoints
 export const API_ENDPOINTS = {
-  HEALTH:    `${API_BASE_URL}/health`,
-  SEARCH_FA: `${API_BASE_URL}/search-fa`,
-  GET_FA:    (fanr) => `${API_BASE_URL}/fa/${fanr}`,
-  SOLL_HOURS: `${API_BASE_URL}/soll-hours`,
+  HEALTH: USE_IONOS_FA
+    ? `${IONOS_API_BASE}/health.php`
+    : `${API_BASE_URL}/health`,
+  SEARCH_FA: USE_IONOS_FA
+    ? `${IONOS_API_BASE}/search-fa.php`
+    : `${API_BASE_URL}/search-fa`,
+  GET_FA: USE_IONOS_FA
+    ? (fanr) =>
+        `${IONOS_API_BASE}/fa.php?fanr=${encodeURIComponent(String(fanr ?? ''))}`
+    : (fanr) => `${API_BASE_URL}/fa/${encodeURIComponent(String(fanr ?? ''))}`,
+  SOLL_HOURS: USE_IONOS_SOLL_HOURS
+    ? `${IONOS_API_BASE}/soll_hours.php`
+    : `${API_BASE_URL}/soll-hours`,
+  /** Nur gesetzt wenn USE_IONOS_SOLL_HOURS – zweiter Versuch in fetchSollFromServer */
+  SOLL_HOURS_FALLBACK: USE_IONOS_SOLL_HOURS ? `${API_BASE_URL}/soll-hours` : null,
+  /** Zweiter Versuch in faService (lokaler Node), falls IONOS zeitweise nicht erreichbar */
+  HEALTH_FALLBACK: USE_IONOS_FA ? `${API_BASE_URL}/health` : null,
+  SEARCH_FA_FALLBACK: USE_IONOS_FA ? `${API_BASE_URL}/search-fa` : null,
+  GET_FA_FALLBACK: USE_IONOS_FA
+    ? (fanr) =>
+        `${API_BASE_URL}/fa/${encodeURIComponent(String(fanr ?? ''))}`
+    : null,
   TEST_IST:  `${API_BASE_URL}/test/ist`,
   // IST direkt aus IONOS-DB (kein lokaler Node-Server nötig)
   DB_IST: (linie, schicht, datum, bereich = null) => {

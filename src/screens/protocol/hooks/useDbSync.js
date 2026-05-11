@@ -1,7 +1,33 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { toIsoUtcOrNow } from '../../../utils/dateSafe';
 
 const API_BASE = 'https://cosmetic-service.com/php-api/produktion';
 const SYNC_INTERVAL_MS = 10_000; // alle 10 Sekunden
+
+/** IONOS/PHP liefert manchmal Warnungen vor dem JSON oder kaputte Antworten — nicht die App crashen lassen. */
+async function parseJsonResponse(res, label) {
+  try {
+    const text = (await res.text()).trim().replace(/^\uFEFF/, '');
+    if (!text) return null;
+    try {
+      return JSON.parse(text);
+    } catch {
+      const i = text.search(/[\[{]/);
+      if (i > 0) {
+        try {
+          return JSON.parse(text.slice(i));
+        } catch { /* ignore */ }
+      }
+      if (__DEV__) {
+        console.warn(`[useDbSync] ${label}: kein gültiges JSON (ersten 180 Zeichen):`, text.slice(0, 180));
+      }
+      return null;
+    }
+  } catch (e) {
+    console.warn(`[useDbSync] ${label}: Lesen fehlgeschlagen`, e.message);
+    return null;
+  }
+}
 
 /**
  * Synct den laufenden Timer-Zustand alle 10s in die IONOS MariaDB.
@@ -35,7 +61,9 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
 
   const toDatetime = useCallback((epochMs) => {
     if (!epochMs) return null;
-    return new Date(Number(epochMs)).toISOString().slice(0, 19).replace('T', ' ');
+    const d = new Date(Number(epochMs));
+    if (!Number.isFinite(d.getTime())) return null;
+    return d.toISOString().slice(0, 19).replace('T', ' ');
   }, []);
 
   const makeSessionRunKey = useCallback((baseKey, bereich) => {
@@ -163,8 +191,8 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       fa_nr:           selectedFA?.FANr         || null,
       stoerung_typ:    issue,
       notiz:           notes                   || null,
-      start_time:      new Date(startTime).toISOString(),
-      end_time:        new Date(endTime).toISOString(),
+      start_time:      toIsoUtcOrNow(startTime),
+      end_time:        toIsoUtcOrNow(endTime),
       dauer_sekunden:  durationSeconds          || 0,
     };
 
@@ -250,10 +278,13 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
 
     try {
       const sessionRes = await apiFetch(`/session.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}&bereich=${encodeURIComponent(bereich)}&datum=${today}`);
-      const session = sessionRes.status === 200 ? await sessionRes.json() : null;
+      const sessionRaw = sessionRes.status === 200 ? await parseJsonResponse(sessionRes, 'session.php') : null;
+      const session =
+        sessionRaw && typeof sessionRaw === 'object' && !Array.isArray(sessionRaw) ? sessionRaw : null;
 
       const stoerRes = await apiFetch(`/stoerungen.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}&bereich=${encodeURIComponent(bereich)}&datum=${today}`);
-      const stoerungen = stoerRes.status === 200 ? await stoerRes.json() : null;
+      const stoerRaw = stoerRes.status === 200 ? await parseJsonResponse(stoerRes, 'stoerungen.php') : null;
+      const stoerungen = Array.isArray(stoerRaw) ? stoerRaw : null;
 
       return { session, stoerungen };
     } catch (e) {

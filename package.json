@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "start": "expo start --dev-client",
+    "start:expo": "expo start",
     "start:usb": "C:\\platform-tools\\adb.exe reverse tcp:19000 tcp:19000 && C:\\platform-tools\\adb.exe reverse tcp:19001 tcp:19001 && C:\\platform-tools\\adb.exe reverse tcp:3001 tcp:3001 && C:\\platform-tools\\adb.exe reverse tcp:3000 tcp:3000 && C:\\platform-tools\\adb.exe reverse tcp:5002 tcp:5002 && C:\\platform-tools\\adb.exe reverse tcp:5004 tcp:5004 && C:\\platform-tools\\adb.exe reverse tcp:5005 tcp:5005 && expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
@@ -21,10 +22,11 @@
     "test:sensor3": "node Sensoren/test-sensor-3.js",
     "test:sensor4": "node Sensoren/test-sensor-4.js",
     "test:sensor5": "node Sensoren/test-sensor-5.js",
-    "test:simulate-context": "node src/Test/simulate_context.js"
+    "test:simulate-context": "node src/Test/simulate_context.js",
+    "sync:ionos": "node scripts/sync-ionos-once.js",
+    "build:apk": "cd android && gradlew.bat assembleRelease",
+    "install:apk": "adb install -r android/app/build/outputs/apk/release/app-release.apk"
   },
-  "build:apk": "cd android && gradlew assembleRelease",
-  "install:apk": "adb install -r android/app/build/outputs/apk/release/app-release.apk",
   "dependencies": {
     "@expo/webpack-config": "^18.0.1",
     "@react-native-async-storage/async-storage": "1.17.11",
@@ -46,7 +48,7 @@
     "react-dom": "18.2.0",
     "react-native": "0.71.14",
     "react-native-web": "~0.18.10",
-    "react-native-zeroconf": "^0.14.0",
+    "react-native-zeroconf": "github:balthazar/react-native-zeroconf",
     "xlsx": "0.18.5"
   },
   "devDependencies": {
