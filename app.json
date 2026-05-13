@@ -9,9 +9,10 @@
     ],
     "version": "1.0.0",
     "orientation": "landscape",
+    "icon": "./assets/app-icon.png",
     "splash": {
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0f1729"
     },
     "updates": {
       "fallbackToCacheTimeout": 0
@@ -26,7 +27,8 @@
     "android": {
       "package": "com.stoerungsprotokoll.app",
       "adaptiveIcon": {
-        "backgroundColor": "#FFFFFF"
+        "foregroundImage": "./assets/app-icon.png",
+        "backgroundColor": "#0f1729"
       }
     },
     "extra": {

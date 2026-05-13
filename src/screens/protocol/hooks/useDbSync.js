@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { toIsoUtcOrNow } from '../../../utils/dateSafe';
+import { formatLocalDateYmd, epochMsToLocalMysqlDatetime, dateValueToLocalMysqlDatetime } from '../../../utils/dateSafe';
 
 const API_BASE = 'https://cosmetic-service.com/php-api/produktion';
 const SYNC_INTERVAL_MS = 10_000; // alle 10 Sekunden
@@ -59,12 +59,7 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     }
   };
 
-  const toDatetime = useCallback((epochMs) => {
-    if (!epochMs) return null;
-    const d = new Date(Number(epochMs));
-    if (!Number.isFinite(d.getTime())) return null;
-    return d.toISOString().slice(0, 19).replace('T', ' ');
-  }, []);
+  const toDatetime = useCallback((epochMs) => epochMsToLocalMysqlDatetime(epochMs), []);
 
   const makeSessionRunKey = useCallback((baseKey, bereich) => {
     if (!baseKey) return null;
@@ -83,7 +78,7 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       return null;
     }
 
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const today = formatLocalDateYmd();
 
     // timer_start_time: epoch ms → MySQL DATETIME string
     const baseRunKey = toDatetime(
@@ -178,7 +173,7 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       return;
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = formatLocalDateYmd();
     const lineNumber = shiftData.selectedLine?.match(/\d+/)?.[0] ?? shiftData.selectedLine;
 
     const payload = {
@@ -191,8 +186,8 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       fa_nr:           selectedFA?.FANr         || null,
       stoerung_typ:    issue,
       notiz:           notes                   || null,
-      start_time:      toIsoUtcOrNow(startTime),
-      end_time:        toIsoUtcOrNow(endTime),
+      start_time:      dateValueToLocalMysqlDatetime(startTime),
+      end_time:        dateValueToLocalMysqlDatetime(endTime),
       dauer_sekunden:  durationSeconds          || 0,
     };
 
@@ -245,7 +240,7 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
   // kein erneutes Schreiben aus einer möglicherweise veralteten Closure nötig.
   const stopSession = useCallback(async () => {
     if (!shiftData?.selectedLine || !shiftData?.selectedShift || !shiftData?.selectedBereich) return;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = formatLocalDateYmd();
     const bereich = shiftData?.selectedBereich || '';
     const baseRunKey = toDatetime(timer.productionStartTime?.current || timer.mainTimerStartTime?.current);
     const sessionRunKey = makeSessionRunKey(baseRunKey, bereich);
@@ -274,7 +269,7 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     const shift = overrideShift || shiftData?.selectedShift;
     const bereich = overrideBereich || shiftData?.selectedBereich || '';
     if (!line || !shift || !bereich) return { session: null, stoerungen: null };
-    const today = new Date().toISOString().slice(0, 10);
+    const today = formatLocalDateYmd();
 
     try {
       const sessionRes = await apiFetch(`/session.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}&bereich=${encodeURIComponent(bereich)}&datum=${today}`);

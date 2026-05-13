@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { toIsoUtcOrNow } from '../utils/dateSafe';
+import { toIsoUtcOrNow, formatLocalDateYmd, epochMsToLocalMysqlDatetime } from '../utils/dateSafe';
 import { View, Text, ScrollView, TouchableOpacity, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ConfirmModal from '../components/ConfirmModal';
@@ -133,10 +133,7 @@ const ProtocolScreen = () => {
     try {
       const toMysqlDatetime = (epochMs) => {
         try {
-          if (!epochMs) return null;
-          const d = new Date(Number(epochMs));
-          if (!Number.isFinite(d.getTime())) return null;
-          return d.toISOString().slice(0, 19).replace('T', ' ');
+          return epochMsToLocalMysqlDatetime(epochMs);
         } catch (_) { return null; }
       };
 
@@ -656,9 +653,8 @@ const ProtocolScreen = () => {
     const sessionRunKeyForReset = (() => {
       const base = timer?.productionStartTime?.current || timer?.mainTimerStartTime?.current;
       if (!base) return null;
-      const d = new Date(Number(base));
-      if (!Number.isFinite(d.getTime())) return null;
-      const baseKey = d.toISOString().slice(0, 19).replace('T', ' ');
+      const baseKey = epochMsToLocalMysqlDatetime(base);
+      if (!baseKey) return null;
       return bereichForReset ? `${baseKey}::${bereichForReset}` : baseKey;
     })();
 
@@ -668,7 +664,7 @@ const ProtocolScreen = () => {
 
     // IST für den beendeten Auftrag explizit zurücksetzen.
     try {
-      const datum = new Date().toISOString().slice(0, 10);
+      const datum = formatLocalDateYmd();
       await fetch('https://cosmetic-service.com/php-api/produktion/ist.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

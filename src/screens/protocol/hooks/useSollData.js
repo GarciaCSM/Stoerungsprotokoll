@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 import { pickAndParseSheet, buildSollMap, fetchSollFromServer } from '../../../services/excelService';
 import FAService from '../../../services/faService';
+import { formatLocalDateYmd } from '../../../utils/dateSafe';
 
 /**
  * Manages SOLL/IST data: loading from cache + server, Excel import, and IST polling.
@@ -62,7 +63,7 @@ export function useSollData({ selectedFA, shiftData }) {
 
     let mounted = true;
     // query IST for tomorrow
-    const datum   = new Date().toISOString().slice(0, 10);
+    const datum = formatLocalDateYmd();
     const linie   = shiftData?.selectedLine;
     const schicht = shiftData?.selectedShift;
     const bereich = shiftData?.selectedBereich;
