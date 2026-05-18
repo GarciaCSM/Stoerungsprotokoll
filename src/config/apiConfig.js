@@ -11,17 +11,25 @@ export const API_BASE_URL = USE_LOCALHOST
 
 // Sensor mapping per Linie/Bereich
 // Werte können ein String (ein Sensor) oder ein Array (mehrere Sensoren) sein.
-// Linie 1 -> sensor1.local (Produktiv Pi)
+// Linie 1 -> Bereichsabhängig: Abfüllung / Verpackung
 // Linie 2 -> Bereichsabhängig: Abfüllung / Verpackung (Verpackung: 2× Pi)
 // Linie 3 -> Testsensor localhost:5003
 const SENSOR_MAPPING = {
-  'Linie 1': 'http://192.168.10.78:3000',
+  'Linie 1': {
+    default: 'http://192.168.10.78:3000',
+    Abfüllung: 'http://192.168.10.78:3000',
+    Verpackung: 'http://192.168.10.25:3000',
+  },
   'Linie 2': {
     default: 'http://localhost:5002',
     Abfüllung: 'http://sensor1.local:3000',
     Verpackung: ['http://192.168.2.53:3000', 'http://192.168.10.26:3000'],
   },
-  'Linie 3': 'http://localhost:5003',
+  'Linie 3': {
+    default: 'http://192.168.10.25:3000',
+    Abfüllung: 'http://192.168.10.25:3000',
+    Verpackung: 'http://localhost:5003',
+  },
 };
 
 // Fallback URL (keep existing behaviour)

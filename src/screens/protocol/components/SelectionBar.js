@@ -36,6 +36,7 @@ export default function SelectionBar({
   sollPerHour,
   handleConfirmSelection,
   showConfirm,
+  sensorError,
 }) {
   const getRequiredChipStyle = (value) => (value ? s.selectionChipFilled : s.selectionChipMissing);
 
@@ -139,6 +140,10 @@ export default function SelectionBar({
           </View>
         )}
       </View>
+
+      {!!sensorError ? (
+        <Text style={s.faSearchError}>{sensorError}</Text>
+      ) : null}
 
       {/* Picker Modal */}
       <Modal visible={openSelectModal !== null} transparent animationType="fade">

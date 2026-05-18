@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toIsoUtcOrNow, formatLocalDateYmd, epochMsToLocalMysqlDatetime } from '../utils/dateSafe';
-import { View, Text, ScrollView, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, Vibration } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ConfirmModal from '../components/ConfirmModal';
 import { useShift } from '../context/ShiftContext';
@@ -26,6 +26,39 @@ import LogsSection    from './protocol/components/LogsSection';
 // Produktion: http://<PI-IP>:3000 | Test: http://localhost:3000 (npm run test:pi-server)
 
 
+// PI antwortet auf GET /context mit JSON – dient als Erreichbarkeitscheck vor „Bestätigen“.
+const SENSOR_PROBE_TIMEOUT_MS = 4500;
+const SENSOR_RETRY_INTERVAL_MS = 10000;
+const SENSOR_UNREACHABLE_MESSAGE =
+  'Verbindungsfehler zum Sensor. Neuer Versuch alle 10 Sekunden.';
+
+async function probeSensorContexts(line, bereich) {
+  if (!line) return false;
+  try {
+    const targets = await getSensorUrlsForLine(line, bereich);
+    if (!Array.isArray(targets) || targets.length === 0) return false;
+    const results = await Promise.all(
+      targets.map(async (raw) => {
+        const base = String(raw || '').replace(/\/$/, '');
+        if (!base) return false;
+        const controller = new AbortController();
+        const timerId = setTimeout(() => controller.abort(), SENSOR_PROBE_TIMEOUT_MS);
+        try {
+          const res = await fetch(`${base}/context`, { method: 'GET', signal: controller.signal });
+          return res.ok;
+        } catch {
+          return false;
+        } finally {
+          clearTimeout(timerId);
+        }
+      })
+    );
+    return results.some(Boolean);
+  } catch {
+    return false;
+  }
+}
+
 //  Constants 
 const IST_COLORS = {
   good:    THEME.colors.dark.success,
@@ -49,6 +82,13 @@ const ProtocolScreen = () => {
   );
   const [lineLocked, setLineLocked]           = useState(false);
   const [openSelectModal, setOpenSelectModal] = useState(null);
+  const [sensorReachabilityError, setSensorReachabilityError] = useState('');
+  const prevSensorReachableRef = useRef(true);
+  const sensorMonitorKeyRef = useRef('');
+
+  useEffect(() => {
+    setSensorReachabilityError('');
+  }, [localLine, localBereich, localShift]);
 
   //  Confirm dialog 
   const [confirmDialog, setConfirmDialog] = useState({ visible: false, title: '', message: '', onConfirm: null });
@@ -66,6 +106,7 @@ const ProtocolScreen = () => {
   const faInitialized = useRef(false);
   const scrollViewRef = useRef(null);
   const lastIstValueRef = useRef(null);
+  const sendPiContextRef = useRef(() => Promise.resolve());
   // Wenn true: selectionConfirmed wurde für die GLEICHE Linie/Schicht neu gesetzt
   // → useEffect darf den laufenden Timer NICHT anfassen
   const skipTimerRestoreRef = useRef(false);
@@ -222,6 +263,72 @@ const ProtocolScreen = () => {
       console.warn('[PI context] OUTER catch', reason, e?.message);
     }
   };
+
+  sendPiContextRef.current = sendPiContext;
+
+  // Sensor: alle 10 s GET /context; bei Abbruch Meldung, nach Reconnect Kontext per POST erneuern.
+  useEffect(() => {
+    const line = selectionConfirmed ? shiftData.selectedLine : localLine;
+    const bereich = selectionConfirmed ? shiftData.selectedBereich : localBereich;
+    const shouldMonitor =
+      (selectionConfirmed && line && bereich) ||
+      (!selectionConfirmed && !!sensorReachabilityError && line && bereich);
+
+    if (!shouldMonitor) {
+      return undefined;
+    }
+
+    const key = `${selectionConfirmed ? 'c' : 'p'}|${line}|${bereich}`;
+    if (sensorMonitorKeyRef.current !== key) {
+      sensorMonitorKeyRef.current = key;
+      prevSensorReachableRef.current = true;
+    }
+
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      const ok = await probeSensorContexts(line, bereich);
+      if (cancelled) return;
+
+      if (ok) {
+        const wasUnreachable = !prevSensorReachableRef.current;
+        prevSensorReachableRef.current = true;
+        setSensorReachabilityError('');
+        if (wasUnreachable && selectionConfirmed) {
+          try {
+            await sendPiContextRef.current(
+              {
+                linie: shiftData.selectedLine,
+                schicht: shiftData.selectedShift,
+                bereich: shiftData.selectedBereich,
+                fa_nr: selectedFA?.FANr ?? null,
+              },
+              'sensor-reconnected'
+            );
+          } catch (_) { /* ignore */ }
+        }
+      } else {
+        prevSensorReachableRef.current = false;
+        setSensorReachabilityError(SENSOR_UNREACHABLE_MESSAGE);
+      }
+    };
+
+    tick();
+    const id = setInterval(tick, SENSOR_RETRY_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [
+    selectionConfirmed,
+    shiftData.selectedLine,
+    shiftData.selectedShift,
+    shiftData.selectedBereich,
+    localLine,
+    localBereich,
+    sensorReachabilityError,
+    selectedFA?.FANr,
+  ]);
 
   // useSollData vor useDbSync – damit istValue beim Sync verfügbar ist
   const {
@@ -537,7 +644,20 @@ const ProtocolScreen = () => {
       (shiftData.selectedLine !== localLine || shiftData.selectedShift !== localShift));
     const hasActiveProduction = Boolean(timer.running || (timer.elapsed || 0) > 0 || timer.stoerRunning);
 
+    const ensureSensorReachable = async () => {
+      setSensorReachabilityError('');
+      const ok = await probeSensorContexts(localLine, localBereich);
+      if (!ok) {
+        setSensorReachabilityError(SENSOR_UNREACHABLE_MESSAGE);
+        try {
+          Vibration.vibrate(200);
+        } catch (_) { /* ignore */ }
+      }
+      return ok;
+    };
+
     const applySelection = async () => {
+      if (!(await ensureSensorReachable())) return;
       const prevLine  = shiftData.selectedLine;
       const prevShift = shiftData.selectedShift;
       const sameSelection = (prevLine === localLine && prevShift === localShift);
@@ -633,6 +753,7 @@ const ProtocolScreen = () => {
     };
 
     if (isChangingSelection && hasActiveProduction) {
+      if (!(await ensureSensorReachable())) return;
       showConfirm({
         title: 'Schichtwechsel bestätigen',
         message: 'Auf der aktuellen Schicht läuft noch Produktion. Beim Wechsel wird der aktuelle Timer für die alte Schicht gespeichert. Trotzdem wechseln?',
@@ -734,6 +855,7 @@ const ProtocolScreen = () => {
         sollPerHour={sollPerHour}
         handleConfirmSelection={handleConfirmSelection}
         showConfirm={showConfirm}
+        sensorError={sensorReachabilityError}
       />
 
       <ScrollView

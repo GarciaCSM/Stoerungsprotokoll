@@ -25,7 +25,8 @@
     "test:simulate-context": "node src/Test/simulate_context.js",
     "sync:ionos": "node scripts/sync-ionos-once.js",
     "build:apk": "cd android && gradlew.bat assembleRelease",
-    "install:apk": "adb install -r android/app/build/outputs/apk/release/app-release.apk"
+    "install:apk": "adb install -r android/app/build/outputs/apk/release/app-release.apk",
+    "logcat:capture": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/android-logcat-capture.ps1"
   },
   "dependencies": {
     "@expo/webpack-config": "^18.0.1",

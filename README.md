@@ -149,14 +149,6 @@ Bestehende DB aktualisieren (je nach Stand):
 	- JDK 17 verwenden.
 	- Umlaute im Pfad vermeiden (ASCII-Pfad nutzen).
 
-- Build bricht ab mit `:expo-application:packageReleaseResources` und **`!directory.isDirectory`** (oft danach `StackOverflowError`):
-	- In vielen `node_modules/*/android/` liegen **eigene `.gradle`-Caches** (z. B. nach Android Studio auf einem Unterprojekt), **Gradle-Version passt nicht** zum Wrapper unter `android/` (z. B. 8.x vs. 7.5.1).
-	- **Lösung:** [scripts/clean-android-nested-gradle.bat](scripts/clean-android-nested-gradle.bat) aus dem Projektstamm ausführen, danach `cd android` → `gradlew.bat clean assembleRelease` (ideal von `S:\android` mit vorherigem `subst`, siehe §13).
-
-- App stürzt nach „Bestätigen“ (Schicht) ab oder startet nicht mehr:
-	- Oft **kaputte oder leere Datumswerte** in der DB (`stoerungen` / Session) oder fehlerhafte lokale Daten — im Code nun abgefedert; bitte **neue APK** bauen/installieren.
-	- Zur Not **App-Daten löschen** (kein Deinstall nötig): Android *Einstellungen → Apps → Störungsprotokoll → Speicher → Daten löschen* — oder per USB: `adb shell pm clear com.stoerungsprotokoll.app` (setzt lokale Einstellungen/Speicher zurück).
-	- **Mit Expo / Dev-Client testen:** Im Projekt `npm run start` (oder `npm run start:usb` mit Tablet per USB) — in der **Development-Build-App** verbinden; bei JS-Fehlern zeigt die App jetzt eine **Fehlerseite** mit Stack (siehe `AppErrorBoundary`). In der Metro-Konsole erscheinen Logs. **Expo Go** reicht wegen Native-Modulen meist **nicht** — es muss eure **eigene Dev-Client-APK** sein.
 
 - Session wird unerwartet wiederhergestellt:
 	- Session-GET-Filter in [php-api/session.php](php-api/session.php) pruefen.
@@ -164,24 +156,23 @@ Bestehende DB aktualisieren (je nach Stand):
 
 ## 12. Sensorverbindungen
 
+- Linie 1 Verpackung -> csm_pi_3 (192.168.10.25)
+
+
 - Linie 2 Abfüllung -> Sensor1.local (ich dachte wir testen Linie 1 zuerst deswegen wurde der PI so unbenannt)
 
-// Der rest hier ist noch zu machen
-
-Linie 2 Verpackung -> Sensor1Verpackung.local
+- Linie 2 Verpackung -> csm_pi_2 (192.168.10.26)
 
 (Rest kommt noch)
 
 ## 13. Auf Android-Gerät kriegen
 
-Wegen Leerzeichen im Pfad (`…\VS Code\…`): zuerst **`map-projekt-als-s.bat`** oder `subst S: "C:\Users\MelihIskender\VS Code\Stoerungsprotkoll"`, dann:
+- **APK bauen** (im Projektstamm): `npm run build:apk`
+- **APK-Pfad:** `android/app/build/outputs/apk/release/app-release.apk`
+- **Installieren:** `npm run install:apk` oder `adb install -r android/app/build/outputs/apk/release/app-release.apk`
+- **USB / Dev:** `npm run start:usb` setzt u. a. `adb reverse` für Metro und Ports.
 
-- `cd /d S:\android`
-- `gradlew.bat assembleRelease` (bei Problemen vorher [scripts/clean-android-nested-gradle.bat](scripts/clean-android-nested-gradle.bat) und `gradlew.bat clean`)
-
-APK: `S:\android\app\build\outputs\apk\release\app-release.apk`
-
-Install: `adb install -r "S:\android\app\build\outputs\apk\release\app-release.apk"`
+Falls der Android-Build wegen langen Pfaden oder Sonderzeichen im Ordner scheitert: Projekt optional auf ein kürzeres Laufwerk legen (z. B. `subst`) oder [scripts/clean-android-nested-gradle.bat](scripts/clean-android-nested-gradle.bat) ausführen, danach im Ordner `android` erneut `gradlew.bat clean assembleRelease`.
 
 ## 14. Lizenz
 
