@@ -62,24 +62,28 @@ node test-db.js
 
 Empfohlener Weg fuer reales Tablet:
 
-1. Terminal A: Metro + Port-Reverse
+1. Ein Terminal (empfohlen):
 
 ```powershell
 npm run start:usb
 ```
 
-Das Script setzt u. a. folgende ADB-Reverse-Rules:
+Das Script:
 
-- `tcp:19000`
-- `tcp:19001`
-- `tcp:3000`
-- `tcp:3001`
+- setzt **adb reverse** (Metro, Pi-Test, **Port 3001**)
+- startet **automatisch** `node server.js` (u. a. **IONOS-Proxy** unter `/ionos-proxy/produktion`)
+- startet danach **Expo**
 
-2. Terminal B: Node-Server
+Im **Dev-Modus** (`__DEV__`) gehen Session, IST, FA und SOLL nicht direkt zu IONOS, sondern ueber  
+`http://localhost:3001/ionos-proxy/produktion` → kein CORS-Problem am Tablet.
+
+2. Optional zweites Terminal nur fuer ODBC-Sync (Excel/FA nach IONOS):
 
 ```powershell
-npm run server schiebt die FA-Daten und die SOLL Daten von der Excel in die IONOS-DB
+npm run server
 ```
+
+(nur noetig, wenn FA/SOLL aus ODBC synchronisiert werden sollen; `start:usb` startet den Server bereits.)
 
 Wenn `EADDRINUSE: 3001` erscheint, laeuft bereits ein Prozess auf dem Port. Dann den Prozess beenden oder den Port wechseln.
 

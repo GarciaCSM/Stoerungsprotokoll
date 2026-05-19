@@ -5,7 +5,7 @@
   "scripts": {
     "start": "expo start --dev-client",
     "start:expo": "expo start",
-    "start:usb": "C:\\platform-tools\\adb.exe reverse tcp:19000 tcp:19000 && C:\\platform-tools\\adb.exe reverse tcp:19001 tcp:19001 && C:\\platform-tools\\adb.exe reverse tcp:3001 tcp:3001 && C:\\platform-tools\\adb.exe reverse tcp:3000 tcp:3000 && C:\\platform-tools\\adb.exe reverse tcp:5002 tcp:5002 && C:\\platform-tools\\adb.exe reverse tcp:5004 tcp:5004 && C:\\platform-tools\\adb.exe reverse tcp:5005 tcp:5005 && expo start",
+    "start:usb": "node scripts/start-usb.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",

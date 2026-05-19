@@ -10,7 +10,12 @@ import { lineButtonConfig } from '../config/lineButtonConfig';
 import { MaterialIcons } from '@expo/vector-icons';
 import FAService from '../services/faService';
 import { formatTime } from '../utils/helper';
-import { API_BASE_URL, getSensorUrlsForLine, resolvePiSensorBridge } from '../config/apiConfig';
+import { API_BASE_URL, getSensorUrlsForLine, resolvePiSensorBridge, IONOS_API_BASE } from '../config/apiConfig';
+import {
+  probeSensorReachable,
+  SENSOR_RETRY_INTERVAL_MS,
+  SENSOR_UNREACHABLE_MESSAGE,
+} from '../utils/sensorReachability';
 
 import { useProductionTimer } from './protocol/hooks/useProductionTimer';
 import { useSollData } from './protocol/hooks/useSollData';
@@ -25,39 +30,6 @@ import LogsSection    from './protocol/components/LogsSection';
 // PI_SERVER_URL kommt jetzt direkt aus apiConfig → zeigt auf den Raspberry Pi
 // Produktion: http://<PI-IP>:3000 | Test: http://localhost:3000 (npm run test:pi-server)
 
-
-// PI antwortet auf GET /context mit JSON – dient als Erreichbarkeitscheck vor „Bestätigen“.
-const SENSOR_PROBE_TIMEOUT_MS = 4500;
-const SENSOR_RETRY_INTERVAL_MS = 10000;
-const SENSOR_UNREACHABLE_MESSAGE =
-  'Verbindungsfehler zum Sensor. Neuer Versuch alle 10 Sekunden.';
-
-async function probeSensorContexts(line, bereich) {
-  if (!line) return false;
-  try {
-    const targets = await getSensorUrlsForLine(line, bereich);
-    if (!Array.isArray(targets) || targets.length === 0) return false;
-    const results = await Promise.all(
-      targets.map(async (raw) => {
-        const base = String(raw || '').replace(/\/$/, '');
-        if (!base) return false;
-        const controller = new AbortController();
-        const timerId = setTimeout(() => controller.abort(), SENSOR_PROBE_TIMEOUT_MS);
-        try {
-          const res = await fetch(`${base}/context`, { method: 'GET', signal: controller.signal });
-          return res.ok;
-        } catch {
-          return false;
-        } finally {
-          clearTimeout(timerId);
-        }
-      })
-    );
-    return results.some(Boolean);
-  } catch {
-    return false;
-  }
-}
 
 //  Constants 
 const IST_COLORS = {
@@ -82,13 +54,57 @@ const ProtocolScreen = () => {
   );
   const [lineLocked, setLineLocked]           = useState(false);
   const [openSelectModal, setOpenSelectModal] = useState(null);
-  const [sensorReachabilityError, setSensorReachabilityError] = useState('');
-  const prevSensorReachableRef = useRef(true);
-  const sensorMonitorKeyRef = useRef('');
 
-  useEffect(() => {
-    setSensorReachabilityError('');
-  }, [localLine, localBereich, localShift]);
+  // Welche Stationen laufen laut DB aktuell pro Linie (active_button != NULL)?
+  // Map: { 'Linie 2': { Abfüllung: { running, shift, linienfuehrer }, Verpackung: { … } }, … }
+  const [occupiedByLine, setOccupiedByLine] = useState({});
+  const [stationCheckMessage, setStationCheckMessage] = useState('');
+
+  // Erreichbarkeit des Pi-Sensors (unabhängig von der DB-basierten Belegt-Logik).
+  const [sensorReachable, setSensorReachable] = useState(true);
+  const [sensorMessage, setSensorMessage] = useState('');
+  const prevSensorReachableRef = useRef(true);
+
+  // Alle Linien, die im Picker auswählbar sind (muss zu LINE_OPTIONS in SelectionBar passen).
+  const ALL_LINES = ['Linie 1', 'Linie 2', 'Linie 3', 'Linie 4', 'Linie 5', 'Linie 6'];
+  const KNOWN_BEREICHS = ['Abfüllung', 'Verpackung'];
+
+  const selectionReadyForConfirm = Boolean(
+    localLine && localLeader && localShift && localBereich
+  );
+
+  const occupiedStations = occupiedByLine?.[localLine] || {};
+
+  const isOwnBereich = (bereich) =>
+    Boolean(bereich)
+    && shiftData?.selectedLine === localLine
+    && shiftData?.selectedBereich === bereich;
+
+  const isBereichBlocked = (bereich) => {
+    if (!bereich) return false;
+    if (isOwnBereich(bereich)) return false;
+    return Boolean(occupiedStations?.[bereich]?.running);
+  };
+
+  // Eine Linie ist „komplett ausgebucht", wenn ALLE bekannten Bereiche dort laufen
+  // und keiner davon auf diesem Tablet bestätigt ist.
+  const isLineFullyBooked = (line) => {
+    if (!line) return false;
+    const stations = occupiedByLine?.[line];
+    if (!stations) return false;
+    const allRunning = KNOWN_BEREICHS.every((b) => stations?.[b]?.running);
+    if (!allRunning) return false;
+    if (shiftData?.selectedLine === line && shiftData?.selectedBereich) return false;
+    return true;
+  };
+
+  const localBereichBlocked = isBereichBlocked(localBereich);
+  const localLineFullyBooked = isLineFullyBooked(localLine);
+  const canConfirmSelection =
+    selectionReadyForConfirm
+    && !localBereichBlocked
+    && !localLineFullyBooked
+    && sensorReachable;
 
   //  Confirm dialog 
   const [confirmDialog, setConfirmDialog] = useState({ visible: false, title: '', message: '', onConfirm: null });
@@ -274,70 +290,6 @@ const ProtocolScreen = () => {
 
   sendPiContextRef.current = sendPiContext;
 
-  // Sensor: alle 10 s GET /context; bei Abbruch Meldung, nach Reconnect Kontext per POST erneuern.
-  useEffect(() => {
-    const line = selectionConfirmed ? shiftData.selectedLine : localLine;
-    const bereich = selectionConfirmed ? shiftData.selectedBereich : localBereich;
-    const shouldMonitor =
-      (selectionConfirmed && line && bereich) ||
-      (!selectionConfirmed && !!sensorReachabilityError && line && bereich);
-
-    if (!shouldMonitor) {
-      return undefined;
-    }
-
-    const key = `${selectionConfirmed ? 'c' : 'p'}|${line}|${bereich}`;
-    if (sensorMonitorKeyRef.current !== key) {
-      sensorMonitorKeyRef.current = key;
-      prevSensorReachableRef.current = true;
-    }
-
-    let cancelled = false;
-    const tick = async () => {
-      if (cancelled) return;
-      const ok = await probeSensorContexts(line, bereich);
-      if (cancelled) return;
-
-      if (ok) {
-        const wasUnreachable = !prevSensorReachableRef.current;
-        prevSensorReachableRef.current = true;
-        setSensorReachabilityError('');
-        if (wasUnreachable && selectionConfirmed) {
-          try {
-            await sendPiContextRef.current(
-              {
-                linie: shiftData.selectedLine,
-                schicht: shiftData.selectedShift,
-                bereich: shiftData.selectedBereich,
-                fa_nr: selectedFA?.FANr ?? null,
-              },
-              'sensor-reconnected'
-            );
-          } catch (_) { /* ignore */ }
-        }
-      } else {
-        prevSensorReachableRef.current = false;
-        setSensorReachabilityError(SENSOR_UNREACHABLE_MESSAGE);
-      }
-    };
-
-    tick();
-    const id = setInterval(tick, SENSOR_RETRY_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, [
-    selectionConfirmed,
-    shiftData.selectedLine,
-    shiftData.selectedShift,
-    shiftData.selectedBereich,
-    localLine,
-    localBereich,
-    sensorReachabilityError,
-    selectedFA?.FANr,
-  ]);
-
   // useSollData vor useDbSync – damit istValue beim Sync verfügbar ist
   const {
     sollPerHour, anzahlArbeiter, istValue,
@@ -374,6 +326,100 @@ const ProtocolScreen = () => {
   const dbSync = useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue,
                                sollPerHour: _soll, sollAktuell: aktuelleSoll,
                                stoerTotalSeconds });
+
+  // ── Welche Linien/Stationen laufen laut DB? ────────────────────────────────
+  // Pollt solange die Auswahl noch nicht bestätigt ist – für ALLE Linien parallel,
+  // damit der Linien-Picker komplett ausgebuchte Linien direkt ausgrauen kann.
+  // Pi spielt für diese Prüfung keine Rolle – Quelle ist `active_button` in der Session.
+  const STATION_POLL_INTERVAL_MS = 10_000;
+  const loadActiveLinesRef = useRef(() => Promise.resolve({}));
+  loadActiveLinesRef.current = dbSync.loadActiveStationsForLines;
+
+  useEffect(() => {
+    if (selectionConfirmed) return undefined;
+
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const map = await loadActiveLinesRef.current(ALL_LINES);
+        if (cancelled) return;
+        setOccupiedByLine(map || {});
+      } catch (e) {
+        if (!cancelled) console.warn('[ProtocolScreen] loadActiveStationsForLines failed', e?.message);
+      }
+    };
+    tick();
+    const id = setInterval(tick, STATION_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [selectionConfirmed]);
+
+  // Hinweis-Text zurücksetzen wenn Auswahl wieder ok ist
+  useEffect(() => {
+    if (!localBereichBlocked && !localLineFullyBooked) setStationCheckMessage('');
+  }, [localBereichBlocked, localLineFullyBooked]);
+
+  // ── Sensor-Erreichbarkeit prüfen (Online/Offline) ──────────────────────────
+  // Vor dem Bestätigen: Linie/Bereich aus lokaler Auswahl.
+  // Nach dem Bestätigen: aus bestätigtem Stand – beim Reconnect Kontext erneut senden.
+  useEffect(() => {
+    const line = selectionConfirmed ? shiftData.selectedLine : localLine;
+    const bereich = selectionConfirmed ? shiftData.selectedBereich : localBereich;
+
+    if (!line || !bereich) {
+      setSensorReachable(true);
+      setSensorMessage('');
+      prevSensorReachableRef.current = true;
+      return undefined;
+    }
+
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      const ok = await probeSensorReachable(line, bereich);
+      if (cancelled) return;
+      if (ok) {
+        const wasUnreachable = !prevSensorReachableRef.current;
+        prevSensorReachableRef.current = true;
+        setSensorReachable(true);
+        setSensorMessage('');
+        if (wasUnreachable && selectionConfirmed) {
+          try {
+            await sendPiContextRef.current(
+              {
+                linie: shiftData.selectedLine,
+                schicht: shiftData.selectedShift,
+                bereich: shiftData.selectedBereich,
+                fa_nr: selectedFA?.FANr ?? null,
+              },
+              'sensor-reconnected',
+            );
+          } catch (_) { /* ignore */ }
+        }
+      } else {
+        prevSensorReachableRef.current = false;
+        setSensorReachable(false);
+        setSensorMessage(SENSOR_UNREACHABLE_MESSAGE);
+      }
+    };
+
+    tick();
+    const id = setInterval(tick, SENSOR_RETRY_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [
+    selectionConfirmed,
+    shiftData.selectedLine,
+    shiftData.selectedShift,
+    shiftData.selectedBereich,
+    localLine,
+    localBereich,
+    selectedFA?.FANr,
+  ]);
 
   // Ref mit syncStoerung befüllen sobald dbSync bereit
   useEffect(() => {
@@ -645,6 +691,23 @@ const ProtocolScreen = () => {
 
   const handleConfirmSelection = async () => {
     if (!localLine || !localLeader || !localShift || !localBereich) return;
+    if (localLineFullyBooked) {
+      try { Vibration.vibrate(200); } catch (_) { /* ignore */ }
+      setStationCheckMessage(`${localLine} ist komplett ausgebucht.`);
+      return;
+    }
+    if (localBereichBlocked) {
+      try { Vibration.vibrate(200); } catch (_) { /* ignore */ }
+      const info = occupiedStations?.[localBereich];
+      setStationCheckMessage(
+        `${localBereich} läuft bereits (${info?.shift || 'andere Schicht'}${info?.linienfuehrer ? ` · ${info.linienfuehrer}` : ''}).`
+      );
+      return;
+    }
+    if (!sensorReachable) {
+      try { Vibration.vibrate(200); } catch (_) { /* ignore */ }
+      return;
+    }
 
     // If switching away from an active selection that currently has production activity,
     // require an explicit confirmation from the user before proceeding.
@@ -652,20 +715,7 @@ const ProtocolScreen = () => {
       (shiftData.selectedLine !== localLine || shiftData.selectedShift !== localShift));
     const hasActiveProduction = Boolean(timer.running || (timer.elapsed || 0) > 0 || timer.stoerRunning);
 
-    const ensureSensorReachable = async () => {
-      setSensorReachabilityError('');
-      const ok = await probeSensorContexts(localLine, localBereich);
-      if (!ok) {
-        setSensorReachabilityError(SENSOR_UNREACHABLE_MESSAGE);
-        try {
-          Vibration.vibrate(200);
-        } catch (_) { /* ignore */ }
-      }
-      return ok;
-    };
-
     const applySelection = async () => {
-      if (!(await ensureSensorReachable())) return;
       const prevLine  = shiftData.selectedLine;
       const prevShift = shiftData.selectedShift;
       const sameSelection = (prevLine === localLine && prevShift === localShift);
@@ -761,7 +811,6 @@ const ProtocolScreen = () => {
     };
 
     if (isChangingSelection && hasActiveProduction) {
-      if (!(await ensureSensorReachable())) return;
       showConfirm({
         title: 'Schichtwechsel bestätigen',
         message: 'Auf der aktuellen Schicht läuft noch Produktion. Beim Wechsel wird der aktuelle Timer für die alte Schicht gespeichert. Trotzdem wechseln?',
@@ -794,7 +843,7 @@ const ProtocolScreen = () => {
     // IST für den beendeten Auftrag explizit zurücksetzen.
     try {
       const datum = formatLocalDateYmd();
-      await fetch('https://cosmetic-service.com/php-api/produktion/ist.php', {
+      await fetch(`${IONOS_API_BASE}/ist.php`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -863,7 +912,13 @@ const ProtocolScreen = () => {
         sollPerHour={sollPerHour}
         handleConfirmSelection={handleConfirmSelection}
         showConfirm={showConfirm}
-        sensorError={sensorReachabilityError}
+        occupiedStations={occupiedStations}
+        occupiedByLine={occupiedByLine}
+        isBereichBlocked={isBereichBlocked}
+        isLineFullyBooked={isLineFullyBooked}
+        stationCheckMessage={stationCheckMessage}
+        sensorMessage={sensorMessage}
+        confirmDisabled={!canConfirmSelection}
       />
 
       <ScrollView

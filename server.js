@@ -1,11 +1,17 @@
 const express = require('express');
 const cors = require('cors');
 const os = require('os');
+const https = require('https');
+const { URL } = require('url');
 require('dotenv').config();
 
 const { API_CONFIG, CORS_OPTIONS } = require('./api/config/config');
 const apiRoutes = require('./api/routes');
 const { runIonosSync } = require('./api/services/ionosSync');
+
+const IONOS_PROXY_TARGET = (
+  process.env.IONOS_SYNC_BASE_URL || 'https://cosmetic-service.com/php-api/produktion'
+).replace(/\/$/, '');
 
 const app = express();
 
@@ -13,6 +19,63 @@ const app = express();
 app.use(cors(CORS_OPTIONS));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// ── IONOS-Proxy für USB-Dev (Tablet → localhost:3001 → cosmetic-service.com) ─
+// Umgeht CORS und erlaubt Session/IST/FA/SOLL ohne direkten HTTPS-Zugriff vom Gerät.
+function ionosProxyHandler(req, res) {
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('Access-Control-Max-Age', '86400');
+    return res.status(204).end();
+  }
+
+  const suffix = req.url && req.url.startsWith('/') ? req.url : `/${req.url || ''}`;
+  let upstream;
+  try {
+    upstream = new URL(suffix, `${IONOS_PROXY_TARGET}/`);
+  } catch (e) {
+    return res.status(400).json({ error: 'Bad proxy URL', message: e.message });
+  }
+
+  const chunks = [];
+  req.on('data', (c) => chunks.push(c));
+  req.on('end', () => {
+    const body = Buffer.concat(chunks);
+    const headers = {
+      Accept: req.headers.accept || 'application/json',
+      Host: upstream.hostname,
+    };
+    if (req.headers['content-type']) {
+      headers['Content-Type'] = req.headers['content-type'];
+    }
+    if (body.length) headers['Content-Length'] = String(body.length);
+
+    const proxyReq = https.request(
+      {
+        hostname: upstream.hostname,
+        port: upstream.port || 443,
+        path: upstream.pathname + upstream.search,
+        method: req.method,
+        headers,
+      },
+      (proxyRes) => {
+        const outHeaders = { ...proxyRes.headers, 'access-control-allow-origin': '*' };
+        res.writeHead(proxyRes.statusCode, outHeaders);
+        proxyRes.pipe(res);
+      },
+    );
+    proxyReq.on('error', (e) => {
+      console.warn('[IONOS-Proxy]', req.method, suffix, e.message);
+      res.status(502).json({ error: 'IONOS proxy failed', message: e.message });
+    });
+    if (body.length) proxyReq.write(body);
+    proxyReq.end();
+  });
+}
+
+app.use('/ionos-proxy/produktion', ionosProxyHandler);
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -98,6 +161,8 @@ const server = app.listen(API_CONFIG.PORT, API_CONFIG.HOST, () => {
   }
   console.log(`  ODBC DSN:         ${(API_CONFIG.ODBC_CONNECTION_STRING || '').split(';')[0] || '<unset>'}`);
   console.log(`  Time:             ${new Date().toLocaleString('de-DE')}`);
+  console.log(`  IONOS-Proxy:      http://localhost:${API_CONFIG.PORT}/ionos-proxy/produktion`);
+  console.log(`                    → ${IONOS_PROXY_TARGET}`);
   console.log('='.repeat(60));
 
   if (API_CONFIG.SYNC_TO_IONOS_ON_START && API_CONFIG.IONOS_SYNC_BASE_URL) {

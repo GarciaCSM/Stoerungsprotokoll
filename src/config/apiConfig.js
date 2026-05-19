@@ -3,11 +3,21 @@
 // Für Pi-Kontext: zwingend Pi-IP (kein localhost).
 const USE_LOCALHOST = true;
 
+/** Lokaler Node-Server (adb reverse tcp:3001 beim USB-Dev). */
+export const LOCAL_DEV_SERVER = 'http://localhost:3001';
+
 // If USE_LOCALHOST is true the app will use localhost for the API
 // (works when the device is connected and `adb reverse tcp:3001 tcp:3001` is active).
 export const API_BASE_URL = USE_LOCALHOST
-  ? 'http://localhost:3001/api'
+  ? `${LOCAL_DEV_SERVER}/api`
   : 'http://192.168.10.152:3001/api'; // keine statische IP und PORT wurde noch nicht freigegeben (die kümmern sich anscheinend drum...)
+
+/**
+ * USB-Dev (__DEV__): IONOS über lokalen Proxy (server.js /ionos-proxy) – kein CORS, gleicher Host wie FA-Fallback.
+ * Release-APK: direkt https://cosmetic-service.com/…
+ */
+export const USE_IONOS_VIA_LOCAL_PROXY =
+  USE_LOCALHOST && typeof __DEV__ !== 'undefined' && __DEV__;
 
 // Sensor mapping per Linie/Bereich
 // Werte können ein String (ein Sensor) oder ein Array (mehrere Sensoren) sein.
@@ -189,8 +199,11 @@ export const getSensorUrlsForLine = async (line, bereich = null) => {
 
 export const SENSOR_MAPPING_CONST = SENSOR_MAPPING;
 
-// IONOS PHP-API base (für IST-Wert via DB)
-export const IONOS_API_BASE = 'https://cosmetic-service.com/php-api/produktion';
+// IONOS PHP-API base (Session, IST, FA, SOLL)
+export const IONOS_REMOTE_BASE = 'https://cosmetic-service.com/php-api/produktion';
+export const IONOS_API_BASE = USE_IONOS_VIA_LOCAL_PROXY
+  ? `${LOCAL_DEV_SERVER}/ionos-proxy/produktion`
+  : IONOS_REMOTE_BASE;
 
 /** true: Tablets laden SOLL-Karte direkt von IONOS (soll_hours.php). false: lokaler Node /api/soll-hours (z. B. mit adb reverse). */
 const USE_IONOS_SOLL_HOURS = true;

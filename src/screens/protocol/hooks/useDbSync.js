@@ -1,7 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { formatLocalDateYmd, epochMsToLocalMysqlDatetime, dateValueToLocalMysqlDatetime } from '../../../utils/dateSafe';
+import { IONOS_API_BASE } from '../../../config/apiConfig';
 
-const API_BASE = 'https://cosmetic-service.com/php-api/produktion';
+const API_BASE = IONOS_API_BASE;
 const SYNC_INTERVAL_MS = 10_000; // alle 10 Sekunden
 
 /** IONOS/PHP liefert manchmal Warnungen vor dem JSON oder kaputte Antworten — nicht die App crashen lassen. */
@@ -288,5 +289,67 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     }
   }, [shiftData]);
 
-  return { syncSession, syncStoerung, stopSession, loadFromDb };
+  // ── Welche Stationen (Bereiche) laufen heute auf dieser Linie? ─────────────
+  // „läuft" = es existiert eine Session-Zeile mit active_button != NULL für irgendeine Schicht heute.
+  // Liefert: { Abfüllung: { running, shift, linienfuehrer }, Verpackung: { … } }.
+  // Wird vom Tablet zyklisch abgefragt, um die Bereichs-Auswahl auszugrauen,
+  // wenn ein anderes Tablet bereits auf derselben Linie produziert.
+  const loadActiveStationsForLine = useCallback(async (line) => {
+    if (!line) return {};
+    const today = formatLocalDateYmd();
+    const shifts = ['Frühschicht', 'Spätschicht'];
+    const bereichs = ['Abfüllung', 'Verpackung'];
+    const result = {};
+    await Promise.all(
+      bereichs.map(async (bereich) => {
+        let running = false;
+        let foundShift = null;
+        let linienfuehrer = null;
+        for (const shift of shifts) {
+          try {
+            const url = `/session.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}&bereich=${encodeURIComponent(bereich)}&datum=${today}`;
+            const res = await apiFetch(url);
+            if (res.status !== 200) continue;
+            const session = await parseJsonResponse(res, 'session.php');
+            if (
+              session &&
+              typeof session === 'object' &&
+              !Array.isArray(session) &&
+              session.active_button
+            ) {
+              running = true;
+              foundShift = shift;
+              linienfuehrer = session.linienfuehrer || null;
+              break;
+            }
+          } catch {
+            /* ignore – Bereich gilt dann als frei */
+          }
+        }
+        result[bereich] = { running, shift: foundShift, linienfuehrer };
+      })
+    );
+    return result;
+  }, []);
+
+  // Für mehrere Linien gleichzeitig (alle Linien-Buttons im Picker auf einmal prüfen).
+  const loadActiveStationsForLines = useCallback(async (lines) => {
+    if (!Array.isArray(lines) || lines.length === 0) return {};
+    const out = {};
+    await Promise.all(
+      lines.map(async (line) => {
+        try {
+          out[line] = await loadActiveStationsForLine(line);
+        } catch {
+          out[line] = {};
+        }
+      })
+    );
+    return out;
+  }, [loadActiveStationsForLine]);
+
+  return {
+    syncSession, syncStoerung, stopSession, loadFromDb,
+    loadActiveStationsForLine, loadActiveStationsForLines,
+  };
 }

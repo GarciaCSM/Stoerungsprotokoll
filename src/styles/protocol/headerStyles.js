@@ -148,10 +148,19 @@ export default StyleSheet.create({
     borderRadius: THEME.radius.md,
     marginRight: THEME.spacing.sm,
   },
+  confirmSmallButtonDisabled: {
+    backgroundColor: COLORS.backgroundLight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    opacity: 0.65,
+  },
   confirmSmallButtonText: {
     color: COLORS.foreground,
     fontWeight: '700',
     fontSize: 13,
+  },
+  confirmSmallButtonTextDisabled: {
+    color: COLORS.foregroundMuted,
   },
   selectionSummarySmall: {
     backgroundColor: COLORS.backgroundLight,
