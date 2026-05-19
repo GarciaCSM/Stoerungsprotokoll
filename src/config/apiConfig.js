@@ -12,7 +12,8 @@ export const API_BASE_URL = USE_LOCALHOST
 // Sensor mapping per Linie/Bereich
 // Werte können ein String (ein Sensor) oder ein Array (mehrere Sensoren) sein.
 // Linie 1 -> Bereichsabhängig: Abfüllung / Verpackung
-// Linie 2 -> Bereichsabhängig: Abfüllung / Verpackung (Verpackung: 2× Pi)
+// Linie 2 -> Bereichsabhängig (Verpackung: 2× Pi). Abfüllung: Pi erwartet Kontext "Linie 1" –
+// siehe resolvePiSensorBridge / getSensorUrlsForLine (Tablet bleibt Linie 2 für DB/UI).
 // Linie 3 -> Testsensor localhost:5003
 const SENSOR_MAPPING = {
   'Linie 1': {
@@ -22,7 +23,7 @@ const SENSOR_MAPPING = {
   },
   'Linie 2': {
     default: 'http://localhost:5002',
-    Abfüllung: 'http://sensor1.local:3000',
+    Abfüllung: 'http://192.168.10.78:3000',
     Verpackung: ['http://192.168.2.53:3000', 'http://192.168.10.26:3000'],
   },
   'Linie 3': {
@@ -120,6 +121,26 @@ export const resolveMdnsHost = async (rawUrl, timeout = 4000) => {
   }
 };
 
+/**
+ * Pi/Sensor erwartet ggf. andere Linie im JSON als am Tablet (DB/UI unverändert).
+ * @returns {{ urlLine: string|null|undefined, urlBereich: string|null|undefined, contextLinie: string|null|undefined }}
+ */
+export function resolvePiSensorBridge(tabletLine, bereich = null) {
+  if (tabletLine == null || tabletLine === '') {
+    return { urlLine: tabletLine, urlBereich: bereich, contextLinie: tabletLine };
+  }
+  const lineStr = String(tabletLine);
+  const b = bereich != null && bereich !== '' ? String(bereich) : '';
+  if (lineStr === 'Linie 2' && b === 'Abfüllung') {
+    return {
+      urlLine: 'Linie 1',
+      urlBereich: 'Abfüllung',
+      contextLinie: 'Linie 1',
+    };
+  }
+  return { urlLine: lineStr, urlBereich: bereich, contextLinie: lineStr };
+}
+
 /** Override (.local → IP) + optional Zeroconf für eine Sensor-URL. */
 async function finalizeSensorUrl(url) {
   if (!url || typeof url !== 'string') return null;
@@ -138,18 +159,19 @@ export const getSensorUrlForLine = async (line, bereich = null) => {
 
 export const getSensorUrlsForLine = async (line, bereich = null) => {
   try {
-    if (!line) {
+    const { urlLine, urlBereich } = resolvePiSensorBridge(line, bereich);
+    if (!urlLine) {
       const u = await finalizeSensorUrl(DEFAULT_PI_SERVER);
       return [u || DEFAULT_PI_SERVER];
     }
-    const mapped = SENSOR_MAPPING[line];
+    const mapped = SENSOR_MAPPING[urlLine];
     if (!mapped) {
       const u = await finalizeSensorUrl(DEFAULT_PI_SERVER);
       return [u || DEFAULT_PI_SERVER];
     }
 
     const resolvedMapping = typeof mapped === 'object'
-      ? (bereich && mapped[bereich]) || mapped.default || DEFAULT_PI_SERVER
+      ? (urlBereich && mapped[urlBereich]) || mapped.default || DEFAULT_PI_SERVER
       : mapped;
 
     const sensorUrls = Array.isArray(resolvedMapping) ? resolvedMapping : [resolvedMapping];

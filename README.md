@@ -78,7 +78,7 @@ Das Script setzt u. a. folgende ADB-Reverse-Rules:
 2. Terminal B: Node-Server
 
 ```powershell
-npm run server
+npm run server schiebt die FA-Daten und die SOLL Daten von der Excel in die IONOS-DB
 ```
 
 Wenn `EADDRINUSE: 3001` erscheint, laeuft bereits ein Prozess auf dem Port. Dann den Prozess beenden oder den Port wechseln.
@@ -137,18 +137,9 @@ Bestehende DB aktualisieren (je nach Stand):
 
 ## 11. Troubleshooting
 
-- Node-Server startet nicht (`EADDRINUSE 3001`):
-	- Prozess auf Port 3001 beenden, dann `npm run server`.
-
-- App erreicht Server nicht:
-	- `npm run start:usb` nutzen.
-	- `adb reverse --list` pruefen.
-	- In [src/config/apiConfig.js](src/config/apiConfig.js) die korrekte Basis-URL sicherstellen.
-
 - Android Release Build scheitert mit Java/Gradle:
 	- JDK 17 verwenden.
 	- Umlaute im Pfad vermeiden (ASCII-Pfad nutzen).
-
 
 - Session wird unerwartet wiederhergestellt:
 	- Session-GET-Filter in [php-api/session.php](php-api/session.php) pruefen.
@@ -159,7 +150,7 @@ Bestehende DB aktualisieren (je nach Stand):
 - Linie 1 Verpackung -> csm_pi_3 (192.168.10.25)
 
 
-- Linie 2 Abfüllung -> Sensor1.local (ich dachte wir testen Linie 1 zuerst deswegen wurde der PI so unbenannt)
+- Linie 2 Abfüllung -> Sensor1.local (ich dachte wir testen Linie 1 zuerst deswegen wurde der PI so unbenannt) Linie 2 gibt sich als Linie 1 beim Sensor1 aus, damit die Verbindung stattfinden kann.
 
 - Linie 2 Verpackung -> csm_pi_2 (192.168.10.26)
 

@@ -10,7 +10,7 @@ import { lineButtonConfig } from '../config/lineButtonConfig';
 import { MaterialIcons } from '@expo/vector-icons';
 import FAService from '../services/faService';
 import { formatTime } from '../utils/helper';
-import { API_BASE_URL, getSensorUrlsForLine } from '../config/apiConfig';
+import { API_BASE_URL, getSensorUrlsForLine, resolvePiSensorBridge } from '../config/apiConfig';
 
 import { useProductionTimer } from './protocol/hooks/useProductionTimer';
 import { useSollData } from './protocol/hooks/useSollData';
@@ -195,8 +195,16 @@ const ProtocolScreen = () => {
           null,
       };
 
+      const tabletLinie = enrichedPayload.linie;
+      const piLinieOut =
+        tabletLinie != null && tabletLinie !== ''
+          ? resolvePiSensorBridge(String(tabletLinie), (payload && payload.bereich) || shiftData?.selectedBereich)
+              .contextLinie
+          : tabletLinie;
+
       const piPayload = {
         ...enrichedPayload,
+        linie: piLinieOut,
         fa_nr:
           enrichedPayload.fa_nr != null && enrichedPayload.fa_nr !== ''
             ? String(enrichedPayload.fa_nr)

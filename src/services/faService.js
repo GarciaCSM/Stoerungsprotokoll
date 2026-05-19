@@ -1,24 +1,19 @@
-import { API_ENDPOINTS, API_ERROR_MESSAGES } from '../config/apiConfig';
-
 /**
- * Erzeugt Host-Varianten nur für lokale Node-URLs (Emulator/Gerät).
- * Für IONOS-URLs (oder andere remote-Hosts) wird genau EIN Kandidat
- * zurückgegeben – verhindert mehrfaches Treffen desselben WP-Defender-
- * Counters, der die IP sonst sperrt.
+ * faService.js – Fertigungsaufträge (FA) und IST-Werte für die Produktions-App
+ *
+ * API-Schicht zwischen Tablet und IONOS-PHP (primär), optional Fallback in apiConfig:
+ *
+ * - searchFA: FA-Suche nach Nummer (search-fa.php).
+ * - getFAByNumber: Einzelnen FA inkl. Artikel laden (fa.php).
+ * - checkHealth: Prüfen, ob die API erreichbar ist (health.php).
+ * - getDbIst: Aktuellen IST-Stückstand aus der DB (ist.php) – wird z. B. jede Sekunde für SOLL/IST angezeigt.
+ * - getTestIst: Nur für Tests gegen einen lokalen Node-Endpunkt (TEST_IST).
+ *
+ * Verwendung: ProtocolScreen (FA-Auswahl), useSollData (IST-Polling).
+ * Produktivbetrieb läuft über IONOS; server.js auf dem PC ist dafür nicht nötig.
  */
-function expandUrlCandidates(url) {
-  if (!url) return [];
-  if (!url.includes('192.168.10.152')) {
-    return [url];
-  }
-  const variants = [
-    url,
-    url.replace('192.168.10.152', '10.0.2.2'),
-    url.replace('192.168.10.152', '10.0.3.2'),
-    url.replace('192.168.10.152', '127.0.0.1'),
-  ];
-  return [...new Set(variants)];
-}
+
+import { API_ENDPOINTS, API_ERROR_MESSAGES } from '../config/apiConfig';
 
 /** True für 4xx-Antworten (außer 404) – diese wiederholen wir nicht. */
 function isFatalHttp(status) {
@@ -45,27 +40,23 @@ class FAService {
     let fatalStatus = null;
 
     outer: for (const base of bases) {
-      for (const root of expandUrlCandidates(base)) {
-        const url = `${root}?query=${encodeURIComponent(query)}`;
-        try {
-          const response = await fetch(url);
-          if (!response.ok) {
-            lastErr = new Error(`HTTP ${response.status}: ${response.statusText}`);
-            tried.push({ url, status: response.status });
-            // 4xx (außer 404) → kein erneuter Retry auf denselben/anderen
-            // Host. Verhindert Lockout-Verstärkung durch WP-Defender.
-            if (isFatalHttp(response.status)) {
-              fatalStatus = response.status;
-              break outer;
-            }
-            continue;
+      const url = `${base}?query=${encodeURIComponent(query)}`;
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          lastErr = new Error(`HTTP ${response.status}: ${response.statusText}`);
+          tried.push({ url, status: response.status });
+          if (isFatalHttp(response.status)) {
+            fatalStatus = response.status;
+            break outer;
           }
-          return await response.json();
-        } catch (error) {
-          lastErr = error;
-          tried.push({ url, message: error.message || String(error) });
-          console.warn('FA Search fetch failed:', url, error.message || error);
+          continue;
         }
+        return await response.json();
+      } catch (error) {
+        lastErr = error;
+        tried.push({ url, message: error.message || String(error) });
+        console.warn('FA Search fetch failed:', url, error.message || error);
       }
     }
 
@@ -96,17 +87,14 @@ class FAService {
    */
   async getFAByNumber(fanr) {
     const candidates = [
-      ...expandUrlCandidates(API_ENDPOINTS.GET_FA(fanr)),
-      ...(API_ENDPOINTS.GET_FA_FALLBACK
-        ? expandUrlCandidates(API_ENDPOINTS.GET_FA_FALLBACK(fanr))
-        : []),
-    ];
-    const unique = [...new Set(candidates)];
+      API_ENDPOINTS.GET_FA(fanr),
+      API_ENDPOINTS.GET_FA_FALLBACK ? API_ENDPOINTS.GET_FA_FALLBACK(fanr) : null,
+    ].filter(Boolean);
 
     let lastErr = null;
     let fatalStatus = null;
 
-    for (const url of unique) {
+    for (const url of candidates) {
       try {
         const response = await fetch(url);
 
@@ -153,13 +141,10 @@ class FAService {
    */
   async checkHealth() {
     const urls = [
-      ...expandUrlCandidates(API_ENDPOINTS.HEALTH),
-      ...(API_ENDPOINTS.HEALTH_FALLBACK
-        ? expandUrlCandidates(API_ENDPOINTS.HEALTH_FALLBACK)
-        : []),
-    ];
-    const unique = [...new Set(urls)];
-    for (const url of unique) {
+      API_ENDPOINTS.HEALTH,
+      API_ENDPOINTS.HEALTH_FALLBACK,
+    ].filter(Boolean);
+    for (const url of urls) {
       try {
         const response = await fetch(url);
         const data = await response.json();
