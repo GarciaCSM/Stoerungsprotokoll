@@ -1,7 +1,34 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { formatLocalDateYmd, epochMsToLocalMysqlDatetime, dateValueToLocalMysqlDatetime } from '../../../utils/dateSafe';
+import { IONOS_API_BASE } from '../../../config/apiConfig';
 
-const API_BASE = 'https://cosmetic-service.com/php-api/produktion';
+const API_BASE = IONOS_API_BASE;
 const SYNC_INTERVAL_MS = 10_000; // alle 10 Sekunden
+
+/** IONOS/PHP liefert manchmal Warnungen vor dem JSON oder kaputte Antworten — nicht die App crashen lassen. */
+async function parseJsonResponse(res, label) {
+  try {
+    const text = (await res.text()).trim().replace(/^\uFEFF/, '');
+    if (!text) return null;
+    try {
+      return JSON.parse(text);
+    } catch {
+      const i = text.search(/[\[{]/);
+      if (i > 0) {
+        try {
+          return JSON.parse(text.slice(i));
+        } catch { /* ignore */ }
+      }
+      if (__DEV__) {
+        console.warn(`[useDbSync] ${label}: kein gültiges JSON (ersten 180 Zeichen):`, text.slice(0, 180));
+      }
+      return null;
+    }
+  } catch (e) {
+    console.warn(`[useDbSync] ${label}: Lesen fehlgeschlagen`, e.message);
+    return null;
+  }
+}
 
 /**
  * Synct den laufenden Timer-Zustand alle 10s in die IONOS MariaDB.
@@ -33,10 +60,7 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     }
   };
 
-  const toDatetime = useCallback((epochMs) => {
-    if (!epochMs) return null;
-    return new Date(Number(epochMs)).toISOString().slice(0, 19).replace('T', ' ');
-  }, []);
+  const toDatetime = useCallback((epochMs) => epochMsToLocalMysqlDatetime(epochMs), []);
 
   const makeSessionRunKey = useCallback((baseKey, bereich) => {
     if (!baseKey) return null;
@@ -55,7 +79,7 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       return null;
     }
 
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const today = formatLocalDateYmd();
 
     // timer_start_time: epoch ms → MySQL DATETIME string
     const baseRunKey = toDatetime(
@@ -150,7 +174,7 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       return;
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = formatLocalDateYmd();
     const lineNumber = shiftData.selectedLine?.match(/\d+/)?.[0] ?? shiftData.selectedLine;
 
     const payload = {
@@ -163,8 +187,8 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
       fa_nr:           selectedFA?.FANr         || null,
       stoerung_typ:    issue,
       notiz:           notes                   || null,
-      start_time:      new Date(startTime).toISOString(),
-      end_time:        new Date(endTime).toISOString(),
+      start_time:      dateValueToLocalMysqlDatetime(startTime),
+      end_time:        dateValueToLocalMysqlDatetime(endTime),
       dauer_sekunden:  durationSeconds          || 0,
     };
 
@@ -217,7 +241,7 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
   // kein erneutes Schreiben aus einer möglicherweise veralteten Closure nötig.
   const stopSession = useCallback(async () => {
     if (!shiftData?.selectedLine || !shiftData?.selectedShift || !shiftData?.selectedBereich) return;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = formatLocalDateYmd();
     const bereich = shiftData?.selectedBereich || '';
     const baseRunKey = toDatetime(timer.productionStartTime?.current || timer.mainTimerStartTime?.current);
     const sessionRunKey = makeSessionRunKey(baseRunKey, bereich);
@@ -246,14 +270,17 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     const shift = overrideShift || shiftData?.selectedShift;
     const bereich = overrideBereich || shiftData?.selectedBereich || '';
     if (!line || !shift || !bereich) return { session: null, stoerungen: null };
-    const today = new Date().toISOString().slice(0, 10);
+    const today = formatLocalDateYmd();
 
     try {
       const sessionRes = await apiFetch(`/session.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}&bereich=${encodeURIComponent(bereich)}&datum=${today}`);
-      const session = sessionRes.status === 200 ? await sessionRes.json() : null;
+      const sessionRaw = sessionRes.status === 200 ? await parseJsonResponse(sessionRes, 'session.php') : null;
+      const session =
+        sessionRaw && typeof sessionRaw === 'object' && !Array.isArray(sessionRaw) ? sessionRaw : null;
 
       const stoerRes = await apiFetch(`/stoerungen.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}&bereich=${encodeURIComponent(bereich)}&datum=${today}`);
-      const stoerungen = stoerRes.status === 200 ? await stoerRes.json() : null;
+      const stoerRaw = stoerRes.status === 200 ? await parseJsonResponse(stoerRes, 'stoerungen.php') : null;
+      const stoerungen = Array.isArray(stoerRaw) ? stoerRaw : null;
 
       return { session, stoerungen };
     } catch (e) {
@@ -262,5 +289,67 @@ export function useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, is
     }
   }, [shiftData]);
 
-  return { syncSession, syncStoerung, stopSession, loadFromDb };
+  // ── Welche Stationen (Bereiche) laufen heute auf dieser Linie? ─────────────
+  // „läuft" = es existiert eine Session-Zeile mit active_button != NULL für irgendeine Schicht heute.
+  // Liefert: { Abfüllung: { running, shift, linienfuehrer }, Verpackung: { … } }.
+  // Wird vom Tablet zyklisch abgefragt, um die Bereichs-Auswahl auszugrauen,
+  // wenn ein anderes Tablet bereits auf derselben Linie produziert.
+  const loadActiveStationsForLine = useCallback(async (line) => {
+    if (!line) return {};
+    const today = formatLocalDateYmd();
+    const shifts = ['Frühschicht', 'Spätschicht'];
+    const bereichs = ['Abfüllung', 'Verpackung'];
+    const result = {};
+    await Promise.all(
+      bereichs.map(async (bereich) => {
+        let running = false;
+        let foundShift = null;
+        let linienfuehrer = null;
+        for (const shift of shifts) {
+          try {
+            const url = `/session.php?linie=${encodeURIComponent(line)}&schicht=${encodeURIComponent(shift)}&bereich=${encodeURIComponent(bereich)}&datum=${today}`;
+            const res = await apiFetch(url);
+            if (res.status !== 200) continue;
+            const session = await parseJsonResponse(res, 'session.php');
+            if (
+              session &&
+              typeof session === 'object' &&
+              !Array.isArray(session) &&
+              session.active_button
+            ) {
+              running = true;
+              foundShift = shift;
+              linienfuehrer = session.linienfuehrer || null;
+              break;
+            }
+          } catch {
+            /* ignore – Bereich gilt dann als frei */
+          }
+        }
+        result[bereich] = { running, shift: foundShift, linienfuehrer };
+      })
+    );
+    return result;
+  }, []);
+
+  // Für mehrere Linien gleichzeitig (alle Linien-Buttons im Picker auf einmal prüfen).
+  const loadActiveStationsForLines = useCallback(async (lines) => {
+    if (!Array.isArray(lines) || lines.length === 0) return {};
+    const out = {};
+    await Promise.all(
+      lines.map(async (line) => {
+        try {
+          out[line] = await loadActiveStationsForLine(line);
+        } catch {
+          out[line] = {};
+        }
+      })
+    );
+    return out;
+  }, [loadActiveStationsForLine]);
+
+  return {
+    syncSession, syncStoerung, stopSession, loadFromDb,
+    loadActiveStationsForLine, loadActiveStationsForLines,
+  };
 }

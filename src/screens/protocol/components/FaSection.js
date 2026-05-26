@@ -15,6 +15,8 @@ export default function FaSection({
   onRemoveFA,
   showConfirm,
   selectionReady,
+  lockMessage = 'Bitte zuerst Linie, Schicht, Linienführer und Bereich auswählen und bestätigen.',
+  lockIcon = 'lock',
 }) {
   return (
     <View style={s.faSectionCard}>
@@ -22,9 +24,9 @@ export default function FaSection({
 
       {!selectionReady ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, gap: 10 }}>
-          <MaterialIcons name="lock" size={18} color={THEME.colors.dark.foregroundMuted} />
+          <MaterialIcons name={lockIcon} size={18} color={THEME.colors.dark.foregroundMuted} />
           <Text style={{ color: THEME.colors.dark.foregroundMuted, fontSize: 13, flexShrink: 1 }}>
-            Bitte zuerst Linie, Schicht, Linienführer und Bereich auswählen und bestätigen.
+            {lockMessage}
           </Text>
         </View>
       ) : !selectedFA ? (

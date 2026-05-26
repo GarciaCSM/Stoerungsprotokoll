@@ -62,24 +62,28 @@ node test-db.js
 
 Empfohlener Weg fuer reales Tablet:
 
-1. Terminal A: Metro + Port-Reverse
+1. Ein Terminal (empfohlen):
 
 ```powershell
 npm run start:usb
 ```
 
-Das Script setzt u. a. folgende ADB-Reverse-Rules:
+Das Script:
 
-- `tcp:19000`
-- `tcp:19001`
-- `tcp:3000`
-- `tcp:3001`
+- setzt **adb reverse** (Metro, Pi-Test, **Port 3001**)
+- startet **automatisch** `node server.js` (u. a. **IONOS-Proxy** unter `/ionos-proxy/produktion`)
+- startet danach **Expo**
 
-2. Terminal B: Node-Server
+Im **Dev-Modus** (`__DEV__`) gehen Session, IST, FA und SOLL nicht direkt zu IONOS, sondern ueber  
+`http://localhost:3001/ionos-proxy/produktion` → kein CORS-Problem am Tablet.
+
+2. Optional zweites Terminal nur fuer ODBC-Sync (Excel/FA nach IONOS):
 
 ```powershell
 npm run server
 ```
+
+(nur noetig, wenn FA/SOLL aus ODBC synchronisiert werden sollen; `start:usb` startet den Server bereits.)
 
 Wenn `EADDRINUSE: 3001` erscheint, laeuft bereits ein Prozess auf dem Port. Dann den Prozess beenden oder den Port wechseln.
 
@@ -137,14 +141,6 @@ Bestehende DB aktualisieren (je nach Stand):
 
 ## 11. Troubleshooting
 
-- Node-Server startet nicht (`EADDRINUSE 3001`):
-	- Prozess auf Port 3001 beenden, dann `npm run server`.
-
-- App erreicht Server nicht:
-	- `npm run start:usb` nutzen.
-	- `adb reverse --list` pruefen.
-	- In [src/config/apiConfig.js](src/config/apiConfig.js) die korrekte Basis-URL sicherstellen.
-
 - Android Release Build scheitert mit Java/Gradle:
 	- JDK 17 verwenden.
 	- Umlaute im Pfad vermeiden (ASCII-Pfad nutzen).
@@ -155,19 +151,23 @@ Bestehende DB aktualisieren (je nach Stand):
 
 ## 12. Sensorverbindungen
 
-- Linie 2 Abfüllung -> Sensor1.local (ich dachte wir testen Linie 1 zuerst deswegen wurde der PI so unbenannt)
+- Linie 1 Verpackung -> csm_pi_3 (192.168.10.25)
 
-// Der rest hier ist noch zu machen
 
-Linie 2 Verpackung -> Sensor1Verpackung.local
+- Linie 2 Abfüllung -> Sensor1.local (ich dachte wir testen Linie 1 zuerst deswegen wurde der PI so unbenannt) Linie 2 gibt sich als Linie 1 beim Sensor1 aus, damit die Verbindung stattfinden kann.
+
+- Linie 2 Verpackung -> csm_pi_2 (192.168.10.26)
 
 (Rest kommt noch)
 
 ## 13. Auf Android-Gerät kriegen
 
-- cd S:\android; .\gradlew assembleRelease
+- **APK bauen** (im Projektstamm): `npm run build:apk`
+- **APK-Pfad:** `android/app/build/outputs/apk/release/app-release.apk`
+- **Installieren:** `npm run install:apk` oder `adb install -r android/app/build/outputs/apk/release/app-release.apk`
+- **USB / Dev:** `npm run start:usb` setzt u. a. `adb reverse` für Metro und Ports.
 
-- adb -s "Gerätenamen falls mehr als 1 angeschlossen" install -r S:\android\app\build\outputs\apk\release\app-release.apk
+Falls der Android-Build wegen langen Pfaden oder Sonderzeichen im Ordner scheitert: Projekt optional auf ein kürzeres Laufwerk legen (z. B. `subst`) oder [scripts/clean-android-nested-gradle.bat](scripts/clean-android-nested-gradle.bat) ausführen, danach im Ordner `android` erneut `gradlew.bat clean assembleRelease`.
 
 ## 14. Lizenz
 

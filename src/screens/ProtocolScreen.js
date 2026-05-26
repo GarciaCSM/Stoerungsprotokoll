@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal } from 'react-native';
+import { toIsoUtcOrNow, formatLocalDateYmd, epochMsToLocalMysqlDatetime } from '../utils/dateSafe';
+import { View, Text, ScrollView, TouchableOpacity, Modal, Vibration } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ConfirmModal from '../components/ConfirmModal';
 import { useShift } from '../context/ShiftContext';
@@ -9,7 +10,12 @@ import { lineButtonConfig } from '../config/lineButtonConfig';
 import { MaterialIcons } from '@expo/vector-icons';
 import FAService from '../services/faService';
 import { formatTime } from '../utils/helper';
-import { API_BASE_URL, getSensorUrlsForLine } from '../config/apiConfig';
+import { API_BASE_URL, getSensorUrlsForLine, resolvePiSensorBridge, IONOS_API_BASE } from '../config/apiConfig';
+import {
+  probeSensorReachable,
+  SENSOR_RETRY_INTERVAL_MS,
+  SENSOR_UNREACHABLE_MESSAGE,
+} from '../utils/sensorReachability';
 
 import { useProductionTimer } from './protocol/hooks/useProductionTimer';
 import { useSollData } from './protocol/hooks/useSollData';
@@ -49,6 +55,57 @@ const ProtocolScreen = () => {
   const [lineLocked, setLineLocked]           = useState(false);
   const [openSelectModal, setOpenSelectModal] = useState(null);
 
+  // Welche Stationen laufen laut DB aktuell pro Linie (active_button != NULL)?
+  // Map: { 'Linie 2': { Abfüllung: { running, shift, linienfuehrer }, Verpackung: { … } }, … }
+  const [occupiedByLine, setOccupiedByLine] = useState({});
+  const [stationCheckMessage, setStationCheckMessage] = useState('');
+
+  // Erreichbarkeit des Pi-Sensors (unabhängig von der DB-basierten Belegt-Logik).
+  const [sensorReachable, setSensorReachable] = useState(true);
+  const [sensorMessage, setSensorMessage] = useState('');
+  const prevSensorReachableRef = useRef(true);
+
+  // Alle Linien, die im Picker auswählbar sind (muss zu LINE_OPTIONS in SelectionBar passen).
+  const ALL_LINES = ['Linie 1', 'Linie 2', 'Linie 3', 'Linie 4', 'Linie 5', 'Linie 6'];
+  const KNOWN_BEREICHS = ['Abfüllung', 'Verpackung'];
+
+  const selectionReadyForConfirm = Boolean(
+    localLine && localLeader && localShift && localBereich
+  );
+
+  const occupiedStations = occupiedByLine?.[localLine] || {};
+
+  const isOwnBereich = (bereich) =>
+    Boolean(bereich)
+    && shiftData?.selectedLine === localLine
+    && shiftData?.selectedBereich === bereich;
+
+  const isBereichBlocked = (bereich) => {
+    if (!bereich) return false;
+    if (isOwnBereich(bereich)) return false;
+    return Boolean(occupiedStations?.[bereich]?.running);
+  };
+
+  // Eine Linie ist „komplett ausgebucht", wenn ALLE bekannten Bereiche dort laufen
+  // und keiner davon auf diesem Tablet bestätigt ist.
+  const isLineFullyBooked = (line) => {
+    if (!line) return false;
+    const stations = occupiedByLine?.[line];
+    if (!stations) return false;
+    const allRunning = KNOWN_BEREICHS.every((b) => stations?.[b]?.running);
+    if (!allRunning) return false;
+    if (shiftData?.selectedLine === line && shiftData?.selectedBereich) return false;
+    return true;
+  };
+
+  const localBereichBlocked = isBereichBlocked(localBereich);
+  const localLineFullyBooked = isLineFullyBooked(localLine);
+  const canConfirmSelection =
+    selectionReadyForConfirm
+    && !localBereichBlocked
+    && !localLineFullyBooked
+    && sensorReachable;
+
   //  Confirm dialog 
   const [confirmDialog, setConfirmDialog] = useState({ visible: false, title: '', message: '', onConfirm: null });
   const showConfirm = ({ title = 'Bestätigen', message = 'Bist du sicher?', onConfirm = null }) =>
@@ -65,6 +122,7 @@ const ProtocolScreen = () => {
   const faInitialized = useRef(false);
   const scrollViewRef = useRef(null);
   const lastIstValueRef = useRef(null);
+  const sendPiContextRef = useRef(() => Promise.resolve());
   // Wenn true: selectionConfirmed wurde für die GLEICHE Linie/Schicht neu gesetzt
   // → useEffect darf den laufenden Timer NICHT anfassen
   const skipTimerRestoreRef = useRef(false);
@@ -73,55 +131,6 @@ const ProtocolScreen = () => {
   const faStorageKey = (line, shift, station) => {
     const st = station ? station : '';
     return `selected_fa:${line}:${shift}:${st}`;
-  };
-
-  const sendPiContext = async (payload, reason = 'unknown') => {
-    const toMysqlDatetime = (epochMs) => {
-      if (!epochMs) return null;
-      return new Date(Number(epochMs)).toISOString().slice(0, 19).replace('T', ' ');
-    };
-
-    const computedSessionRunKey = toMysqlDatetime(
-      timer?.productionStartTime?.current || timer?.mainTimerStartTime?.current
-    );
-    const makeSessionRunKey = (baseKey, bereich) => {
-      if (!baseKey) return null;
-      if (!bereich) return baseKey;
-      return `${baseKey}::${bereich}`;
-    };
-
-    const enrichedPayload = {
-      ...payload,
-      session_run_key: payload?.session_run_key || makeSessionRunKey(computedSessionRunKey, payload?.bereich || shiftData?.selectedBereich) || null,
-    };
-
-    const line = payload?.linie || shiftData?.selectedLine;
-    const bereich = payload?.bereich || shiftData?.selectedBereich || null;
-    const targets = await getSensorUrlsForLine(line, bereich);
-    console.warn('[PI context] CALL', { reason, targets, payload: enrichedPayload });
-    if (!targets?.length) {
-      console.warn('[PI context] ABORTED: no targets for PI context');
-      return;
-    }
-
-    await Promise.all(targets.map(async (target) => {
-      try {
-        console.warn(`[PI context] POST ${target}/context`);
-        const res = await fetch(`${target}/context`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(enrichedPayload),
-        });
-        if (!res.ok) {
-          const msg = await res.text();
-          console.warn(`[PI context] ${reason} ${target} HTTP ${res.status}: ${msg}`);
-        } else {
-          console.warn(`[PI context] ${reason} ${target} OK`);
-        }
-      } catch (e) {
-        console.warn(`[PI context] ${reason} ${target} failed:`, e.message);
-      }
-    }));
   };
 
   // Persist FA whenever it changes — skip the very first render (null initial state)
@@ -175,6 +184,112 @@ const ProtocolScreen = () => {
 
   const timer = useProductionTimer({ shiftData, saveStoerLog: saveStoerLogWithSync });
 
+  const sendPiContext = async (payload, reason = 'unknown') => {
+    // Komplette Funktion in äußerem try/catch – verhindert jegliche
+    // unhandled rejection, die im Release-APK zum Absturz führen würde.
+    try {
+      const toMysqlDatetime = (epochMs) => {
+        try {
+          return epochMsToLocalMysqlDatetime(epochMs);
+        } catch (_) { return null; }
+      };
+
+      const computedSessionRunKey = toMysqlDatetime(
+        timer?.productionStartTime?.current || timer?.mainTimerStartTime?.current
+      );
+      const makeSessionRunKey = (baseKey, bereich) => {
+        if (!baseKey) return null;
+        if (!bereich) return baseKey;
+        return `${baseKey}::${bereich}`;
+      };
+
+      const enrichedPayload = {
+        ...(payload || {}),
+        session_run_key:
+          (payload && payload.session_run_key) ||
+          makeSessionRunKey(computedSessionRunKey, (payload && payload.bereich) || shiftData?.selectedBereich) ||
+          null,
+      };
+
+      const tabletLinie = enrichedPayload.linie;
+      const piLinieOut =
+        tabletLinie != null && tabletLinie !== ''
+          ? resolvePiSensorBridge(String(tabletLinie), (payload && payload.bereich) || shiftData?.selectedBereich)
+              .contextLinie
+          : tabletLinie;
+
+      const piPayload = {
+        ...enrichedPayload,
+        linie: piLinieOut,
+        fa_nr:
+          enrichedPayload.fa_nr != null && enrichedPayload.fa_nr !== ''
+            ? String(enrichedPayload.fa_nr)
+            : enrichedPayload.fa_nr,
+      };
+
+      let body;
+      try {
+        body = JSON.stringify(piPayload);
+      } catch (e) {
+        console.warn('[PI context] JSON.stringify fehlgeschlagen', reason, e?.message);
+        return;
+      }
+
+      const line = (payload && payload.linie) || shiftData?.selectedLine;
+      const bereich = (payload && payload.bereich) || shiftData?.selectedBereich || null;
+
+      let targets = [];
+      try {
+        targets = await getSensorUrlsForLine(line, bereich);
+      } catch (e) {
+        console.warn('[PI context] getSensorUrlsForLine fehlgeschlagen', reason, e?.message);
+        return;
+      }
+      console.warn('[PI context] CALL', { reason, targets, payload: piPayload });
+      if (!Array.isArray(targets) || targets.length === 0) {
+        console.warn('[PI context] ABORTED: no targets for PI context');
+        return;
+      }
+
+      // .allSettled statt .all → einzelne Rejects können niemals den
+      // Aufrufer abreißen (wichtig für Release-Hermes).
+      await Promise.allSettled(targets.map(async (target) => {
+        if (!target || typeof target !== 'string') return;
+        let timeoutId = null;
+        try {
+          console.warn(`[PI context] POST ${target}/context`);
+          const controller = new AbortController();
+          timeoutId = setTimeout(() => {
+            try { controller.abort(); } catch (_) {}
+          }, 5000);
+          const res = await fetch(`${target}/context`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json; charset=utf-8' },
+            body,
+            signal: controller.signal,
+          });
+          if (!res.ok) {
+            let msg = '';
+            try { msg = await res.text(); } catch (_) { msg = '<no body>'; }
+            console.warn(`[PI context] ${reason} ${target} HTTP ${res.status}: ${msg}`);
+          } else {
+            console.warn(`[PI context] ${reason} ${target} OK`);
+          }
+        } catch (e) {
+          console.warn(`[PI context] ${reason} ${target} failed:`, e?.message);
+        } finally {
+          if (timeoutId != null) {
+            try { clearTimeout(timeoutId); } catch (_) {}
+          }
+        }
+      }));
+    } catch (e) {
+      console.warn('[PI context] OUTER catch', reason, e?.message);
+    }
+  };
+
+  sendPiContextRef.current = sendPiContext;
+
   // useSollData vor useDbSync – damit istValue beim Sync verfügbar ist
   const {
     sollPerHour, anzahlArbeiter, istValue,
@@ -184,7 +299,7 @@ const ProtocolScreen = () => {
 
   // Hilfsfunktion: Session aus DB auf Timer + FA anwenden
   const applyDbSession = async (session) => {
-    if (!session) return;
+    if (!session || typeof session !== 'object' || Array.isArray(session)) return;
     await timer.applyRemoteSession(session);
     // DB gewinnt immer – FA aus Session übernehmen (überschreibt lokalen Stand)
     if (session.fa_nr) {
@@ -211,6 +326,100 @@ const ProtocolScreen = () => {
   const dbSync = useDbSync({ shiftData, timer, selectionConfirmed, selectedFA, istValue,
                                sollPerHour: _soll, sollAktuell: aktuelleSoll,
                                stoerTotalSeconds });
+
+  // ── Welche Linien/Stationen laufen laut DB? ────────────────────────────────
+  // Pollt solange die Auswahl noch nicht bestätigt ist – für ALLE Linien parallel,
+  // damit der Linien-Picker komplett ausgebuchte Linien direkt ausgrauen kann.
+  // Pi spielt für diese Prüfung keine Rolle – Quelle ist `active_button` in der Session.
+  const STATION_POLL_INTERVAL_MS = 10_000;
+  const loadActiveLinesRef = useRef(() => Promise.resolve({}));
+  loadActiveLinesRef.current = dbSync.loadActiveStationsForLines;
+
+  useEffect(() => {
+    if (selectionConfirmed) return undefined;
+
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const map = await loadActiveLinesRef.current(ALL_LINES);
+        if (cancelled) return;
+        setOccupiedByLine(map || {});
+      } catch (e) {
+        if (!cancelled) console.warn('[ProtocolScreen] loadActiveStationsForLines failed', e?.message);
+      }
+    };
+    tick();
+    const id = setInterval(tick, STATION_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [selectionConfirmed]);
+
+  // Hinweis-Text zurücksetzen wenn Auswahl wieder ok ist
+  useEffect(() => {
+    if (!localBereichBlocked && !localLineFullyBooked) setStationCheckMessage('');
+  }, [localBereichBlocked, localLineFullyBooked]);
+
+  // ── Sensor-Erreichbarkeit prüfen (Online/Offline) ──────────────────────────
+  // Vor dem Bestätigen: Linie/Bereich aus lokaler Auswahl.
+  // Nach dem Bestätigen: aus bestätigtem Stand – beim Reconnect Kontext erneut senden.
+  useEffect(() => {
+    const line = selectionConfirmed ? shiftData.selectedLine : localLine;
+    const bereich = selectionConfirmed ? shiftData.selectedBereich : localBereich;
+
+    if (!line || !bereich) {
+      setSensorReachable(true);
+      setSensorMessage('');
+      prevSensorReachableRef.current = true;
+      return undefined;
+    }
+
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      const ok = await probeSensorReachable(line, bereich);
+      if (cancelled) return;
+      if (ok) {
+        const wasUnreachable = !prevSensorReachableRef.current;
+        prevSensorReachableRef.current = true;
+        setSensorReachable(true);
+        setSensorMessage('');
+        if (wasUnreachable && selectionConfirmed) {
+          try {
+            await sendPiContextRef.current(
+              {
+                linie: shiftData.selectedLine,
+                schicht: shiftData.selectedShift,
+                bereich: shiftData.selectedBereich,
+                fa_nr: selectedFA?.FANr ?? null,
+              },
+              'sensor-reconnected',
+            );
+          } catch (_) { /* ignore */ }
+        }
+      } else {
+        prevSensorReachableRef.current = false;
+        setSensorReachable(false);
+        setSensorMessage(SENSOR_UNREACHABLE_MESSAGE);
+      }
+    };
+
+    tick();
+    const id = setInterval(tick, SENSOR_RETRY_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [
+    selectionConfirmed,
+    shiftData.selectedLine,
+    shiftData.selectedShift,
+    shiftData.selectedBereich,
+    localLine,
+    localBereich,
+    selectedFA?.FANr,
+  ]);
 
   // Ref mit syncStoerung befüllen sobald dbSync bereit
   useEffect(() => {
@@ -339,10 +548,10 @@ const ProtocolScreen = () => {
             leader: s.linienfuehrer || null,
             issue: s.stoerung_typ,
             notes: s.notiz || null,
-            startTime: new Date(s.start_time).toISOString(),
-            endTime: new Date(s.end_time).toISOString(),
+            startTime: toIsoUtcOrNow(s.start_time),
+            endTime: toIsoUtcOrNow(s.end_time),
             durationSeconds: Number(s.dauer_sekunden || 0),
-            createdAt: s.erstellt_am || new Date().toISOString(),
+            createdAt: toIsoUtcOrNow(s.erstellt_am),
           }));
 
           // Nur DB‑Störungen anzeigen (ersetze die aktuell angezeigten Logs)
@@ -405,28 +614,40 @@ const ProtocolScreen = () => {
   };
 
   const handleSelectFA = async (fa) => {
-    const newFA = { FANr: fa.FANr, ArtikelNr: fa.ArtikelNr, Artikelbezeichnung: fa.Artikelbezeichnung };
+    const rawFanr = fa.FANr != null && fa.FANr !== '' ? fa.FANr : fa.fanr;
+    const newFA = {
+      FANr: rawFanr,
+      ArtikelNr: fa.ArtikelNr ?? fa.artikel_nr ?? '',
+      Artikelbezeichnung: fa.Artikelbezeichnung ?? fa.artikel_bezeichnung ?? '',
+    };
     setSelectedFA(newFA);
     setFaSearchText(''); setFaSearchResults([]); setFaSearchError('');
 
-    // Pi-Server über neue FA und aktuellen Kontext informieren
-    sendPiContext({
-      linie:  shiftData.selectedLine  || null,
-      schicht: shiftData.selectedShift || null,
-      bereich: localBereich || null,
-      fa_nr:   fa.FANr,
+    const liniePi = shiftData?.selectedLine ?? localLine ?? null;
+    const schichtPi = shiftData?.selectedShift ?? localShift ?? null;
+    const bereichPi = shiftData?.selectedBereich ?? localBereich ?? null;
+
+    // Pi-Server über neue FA und aktuellen Kontext informieren (await: vermeidet Race mit
+    // einem noch ausstehenden confirm-selection-changed POST mit fa_nr:null).
+    await sendPiContext({
+      linie: liniePi,
+      schicht: schichtPi,
+      bereich: bereichPi,
+      fa_nr: rawFanr,
     }, 'fa-selected');
 
     // Prüfe ob für diese FA heute auf dieser Linie/Schicht eine Session gespeichert ist.
     // Falls ja → Brutto-Start, Netto-Zeit, Pausen, IST-Stk wiederherstellen (selbe Produktion).
     // Falls eine andere FA gespeichert ist → Timer zurücksetzen (neue Produktion).
     if (!shiftData?.selectedLine || !shiftData?.selectedShift) return;
+    const fanrKey = rawFanr != null ? String(rawFanr) : '';
     try {
       const { session, stoerungen } = await dbSync.loadFromDb();
-      if (session && session.fa_nr === fa.FANr) {
+      const sessFa = session?.fa_nr != null ? String(session.fa_nr) : '';
+      if (session && sessFa && fanrKey && sessFa === fanrKey) {
         // Gleiche FA wie in DB → alles wiederherstellen
         await timer.applyRemoteSession(session);
-      } else if (session && session.fa_nr && session.fa_nr !== fa.FANr) {
+      } else if (session && sessFa && fanrKey && sessFa !== fanrKey) {
         // Andere FA war gespeichert → neuer Produktionslauf → Timer zurücksetzen
         await timer.resetTimer();
       }
@@ -435,7 +656,7 @@ const ProtocolScreen = () => {
       // Störungen für diese FA laden (DB + AsyncStorage) – bereits per FA gefiltert
       if (Array.isArray(stoerungen) && stoerungen.length) {
         const incoming = stoerungen
-          .filter(s => s.fa_nr === fa.FANr)
+          .filter(s => s.fa_nr != null && String(s.fa_nr) === fanrKey)
           .map(s => ({
             id: s.id || Date.now(),
             type: 'störung',
@@ -447,15 +668,15 @@ const ProtocolScreen = () => {
             fa_nr: s.fa_nr,
             issue: s.stoerung_typ,
             notes: s.notiz || null,
-            startTime: new Date(s.start_time).toISOString(),
-            endTime: new Date(s.end_time).toISOString(),
+            startTime: toIsoUtcOrNow(s.start_time),
+            endTime: toIsoUtcOrNow(s.end_time),
             durationSeconds: Number(s.dauer_sekunden || 0),
-            createdAt: s.erstellt_am || new Date().toISOString(),
+            createdAt: toIsoUtcOrNow(s.erstellt_am),
           }));
         setLocalLogsFromServer(incoming);
       } else {
         // Keine DB-Störungen für diese FA → aus AsyncStorage laden (FA-gefiltert via hook)
-        loadLocalLogs(shiftData.selectedLine, shiftData.selectedShift, fa.FANr);
+        loadLocalLogs(shiftData.selectedLine, shiftData.selectedShift, rawFanr);
       }
     } catch (e) {
       console.warn('[handleSelectFA] DB-Session-Lookup fehlgeschlagen:', e.message);
@@ -470,6 +691,23 @@ const ProtocolScreen = () => {
 
   const handleConfirmSelection = async () => {
     if (!localLine || !localLeader || !localShift || !localBereich) return;
+    if (localLineFullyBooked) {
+      try { Vibration.vibrate(200); } catch (_) { /* ignore */ }
+      setStationCheckMessage(`${localLine} ist komplett ausgebucht.`);
+      return;
+    }
+    if (localBereichBlocked) {
+      try { Vibration.vibrate(200); } catch (_) { /* ignore */ }
+      const info = occupiedStations?.[localBereich];
+      setStationCheckMessage(
+        `${localBereich} läuft bereits (${info?.shift || 'andere Schicht'}${info?.linienfuehrer ? ` · ${info.linienfuehrer}` : ''}).`
+      );
+      return;
+    }
+    if (!sensorReachable) {
+      try { Vibration.vibrate(200); } catch (_) { /* ignore */ }
+      return;
+    }
 
     // If switching away from an active selection that currently has production activity,
     // require an explicit confirmation from the user before proceeding.
@@ -516,7 +754,8 @@ const ProtocolScreen = () => {
       setLineLocked(true); setSelectionConfirmed(true);
 
       // inform Pi‑Server über aktualisierte Linie/Schicht/Bereich/FA
-      sendPiContext(
+      // await: sonst kann ein langsames POST noch nach FA-Auswahl ankommen und fa_nr:null setzen.
+      await sendPiContext(
         { linie: localLine, schicht: localShift, bereich: localBereich, fa_nr: selectedFA?.FANr || null },
         'confirm-selection-changed'
       );
@@ -545,10 +784,10 @@ const ProtocolScreen = () => {
             leader: s.linienfuehrer || null,
             issue: s.stoerung_typ,
             notes: s.notiz || null,
-            startTime: new Date(s.start_time).toISOString(),
-            endTime: new Date(s.end_time).toISOString(),
+            startTime: toIsoUtcOrNow(s.start_time),
+            endTime: toIsoUtcOrNow(s.end_time),
             durationSeconds: Number(s.dauer_sekunden || 0),
-            createdAt: s.erstellt_am || new Date().toISOString(),
+            createdAt: toIsoUtcOrNow(s.erstellt_am),
           }));
           setLocalLogsFromServer(incoming);
         }
@@ -592,7 +831,8 @@ const ProtocolScreen = () => {
     const sessionRunKeyForReset = (() => {
       const base = timer?.productionStartTime?.current || timer?.mainTimerStartTime?.current;
       if (!base) return null;
-      const baseKey = new Date(Number(base)).toISOString().slice(0, 19).replace('T', ' ');
+      const baseKey = epochMsToLocalMysqlDatetime(base);
+      if (!baseKey) return null;
       return bereichForReset ? `${baseKey}::${bereichForReset}` : baseKey;
     })();
 
@@ -602,8 +842,8 @@ const ProtocolScreen = () => {
 
     // IST für den beendeten Auftrag explizit zurücksetzen.
     try {
-      const datum = new Date().toISOString().slice(0, 10);
-      await fetch('https://cosmetic-service.com/php-api/produktion/ist.php', {
+      const datum = formatLocalDateYmd();
+      await fetch(`${IONOS_API_BASE}/ist.php`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -672,6 +912,13 @@ const ProtocolScreen = () => {
         sollPerHour={sollPerHour}
         handleConfirmSelection={handleConfirmSelection}
         showConfirm={showConfirm}
+        occupiedStations={occupiedStations}
+        occupiedByLine={occupiedByLine}
+        isBereichBlocked={isBereichBlocked}
+        isLineFullyBooked={isLineFullyBooked}
+        stationCheckMessage={stationCheckMessage}
+        sensorMessage={sensorMessage}
+        confirmDisabled={!canConfirmSelection}
       />
 
       <ScrollView

@@ -1,3 +1,16 @@
+/**
+ * excelService.js – SOLL-Stückzahlen (Stück pro Stunde) für die Produktions-App
+ *
+ * Zuständig für alles rund um die Excel-Datei „SOLL-STUNDEN“ und deren Nutzung im Tablet:
+ *
+ * - pickAndParseSheet: Excel/CSV vom Tablet auswählen und einlesen (z. B. manueller Import).
+ * - buildSollMap: Zeilen in Maps umwandeln (Artikelnummer → SOLL/h, optional Anzahl Arbeiter).
+ * - fetchSollFromServer: SOLL-Daten von IONOS laden (soll_hours.php), mit optionalem Fallback aus apiConfig.
+ *
+ * Verwendung: ProtocolScreen / useSollData (SOLL-Karte, Import-Button).
+ * Kein Bezug zum lokalen server.js – der synchronisiert die Excel separat auf IONOS.
+ */
+
 import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import XLSX from 'xlsx';
@@ -114,21 +127,15 @@ export function buildSollMap(rows, rowsArr = null, keyColumnCandidates = ['kopie
   return { sollMap, arbeitMap }; // empty
 }
 
-// Fetch mapping from backend endpoint (server reads the SharePoint/OneDrive file)
+// SOLL-Mapping von IONOS (primär); optional Fallback aus apiConfig.
 export async function fetchSollFromServer() {
-  const primary = API_ENDPOINTS.SOLL_HOURS;
-  const fallbacks = [
-    primary,
-    // Android emulator default to host's localhost
-    primary.replace('192.168.10.127', '10.0.2.2'),
-    // Genymotion
-    primary.replace('192.168.10.127', '10.0.3.2'),
-    // iOS simulator / Expo on same machine
-    primary.replace('192.168.10.127', '127.0.0.1')
+  const urls = [
+    API_ENDPOINTS.SOLL_HOURS,
+    API_ENDPOINTS.SOLL_HOURS_FALLBACK,
   ].filter(Boolean);
 
   const errors = [];
-  for (const url of fallbacks) {
+  for (const url of urls) {
     try {
       const resp = await fetch(url, {
         headers: {
@@ -140,7 +147,6 @@ export async function fetchSollFromServer() {
       return { ok: true, mapping: payload.mapping || {}, arbeitMapping: payload.arbeitMapping || {}, source: payload.source || url };
     } catch (err) {
       errors.push({ url, message: err.message || String(err) });
-      // continue to next fallback
     }
   }
 

@@ -22,6 +22,8 @@ if (!argvUrl) {
   process.exit(1);
 }
 const BASE_URL = argvUrl.split('=').slice(1).join('=').replace(/\/$/, '');
+/** Muss zu GET/DELETE session.php / stoerungen.php passen (Pflichtfeld). */
+const TEST_BEREICH_QS = `bereich=${encodeURIComponent('Abfüllung')}`;
 
 // ── Hilfsfunktion: HTTP-GET ───────────────────────────────────
 function get(url) {
@@ -108,7 +110,7 @@ async function run() {
   console.log('\n📡  Test 2 – Session abrufen (404 = DB-Verbindung ok)');
   sep();
   try {
-    const url = `${BASE_URL}/session.php?linie=Test&schicht=Test&datum=2000-01-01`;
+    const url = `${BASE_URL}/session.php?linie=Test&schicht=Test&datum=2000-01-01&${TEST_BEREICH_QS}`;
     const res = await get(url);
     if (res.status === 404) {
       ok(`HTTP 404 erwartet – DB-Verbindung funktioniert`);
@@ -131,10 +133,13 @@ async function run() {
     const res = await post(`${BASE_URL}/session.php`, {
       linie:           'TEST-Linie',
       schicht:         'TEST-Schicht',
+      bereich:         'Abfüllung',
       datum:           '2000-01-01',
+      session_run_key: '2000-01-01 00:00:00::Abfüllung',
+      timer_start_time:'2000-01-01 00:00:00',
       linienfuehrer:   'Test User',
       elapsed_seconds: 42,
-      running:         0,
+      running:         1,
       // send some dummy SOLL values to exercise new columns
       soll_pro_stunde: 100,
       soll_aktuell:    10,
@@ -154,7 +159,7 @@ async function run() {
   console.log('\n📡  Test 4 – Session lesen (GET /session.php)');
   sep();
   try {
-    const url = `${BASE_URL}/session.php?linie=TEST-Linie&schicht=TEST-Schicht&datum=2000-01-01`;
+    const url = `${BASE_URL}/session.php?linie=TEST-Linie&schicht=TEST-Schicht&datum=2000-01-01&${TEST_BEREICH_QS}`;
     const res = await get(url);
     if (res.status === 200) {
       const s = res.body;
@@ -184,6 +189,7 @@ async function run() {
     const res = await post(`${BASE_URL}/stoerungen.php`, {
       linie:           'TEST-Linie',
       schicht:         'TEST-Schicht',
+      bereich:         'Abfüllung',
       datum:           '2000-01-01',
       stoerung_typ:    'Testfehler',
       notiz:           'Automatischer Verbindungstest',
@@ -207,7 +213,7 @@ async function run() {
   console.log('\n📡  Test 6 – Störungen lesen (GET /stoerungen.php)');
   sep();
   try {
-    const url = `${BASE_URL}/stoerungen.php?linie=TEST-Linie&schicht=TEST-Schicht&datum=2000-01-01`;
+    const url = `${BASE_URL}/stoerungen.php?linie=TEST-Linie&schicht=TEST-Schicht&datum=2000-01-01&${TEST_BEREICH_QS}`;
     const res = await get(url);
     if (res.status === 200 && Array.isArray(res.body)) {
       ok(`${res.body.length} Störung(en) gefunden`);
@@ -266,7 +272,7 @@ async function run() {
   console.log('\n🧹  Testdaten aufräumen (DELETE /session.php)');
   sep();
   try {
-    const url = `${BASE_URL}/session.php?linie=TEST-Linie&schicht=TEST-Schicht&datum=2000-01-01`;
+    const url = `${BASE_URL}/session.php?linie=TEST-Linie&schicht=TEST-Schicht&datum=2000-01-01&${TEST_BEREICH_QS}&session_run_key=${encodeURIComponent('2000-01-01 00:00:00::Abfüllung')}`;
     const mod  = url.startsWith('https') ? https : http;
     const result = await new Promise((resolve, reject) => {
       const parsed = new URL(url);

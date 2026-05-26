@@ -36,8 +36,29 @@ export default function SelectionBar({
   sollPerHour,
   handleConfirmSelection,
   showConfirm,
+  // DB-basierte Stations-Verfügbarkeit
+  occupiedStations = {},
+  occupiedByLine = {},
+  isBereichBlocked,
+  isLineFullyBooked,
+  stationCheckMessage = '',
+  // Pi-Erreichbarkeit (unabhängig von Belegt-Logik)
+  sensorMessage = '',
+  confirmDisabled = false,
 }) {
   const getRequiredChipStyle = (value) => (value ? s.selectionChipFilled : s.selectionChipMissing);
+  const isBlocked = typeof isBereichBlocked === 'function' ? isBereichBlocked : () => false;
+  const isLineBlocked = typeof isLineFullyBooked === 'function' ? isLineFullyBooked : () => false;
+
+  // Kurzer Belegt-Hinweis pro Linie (für das Linien-Modal).
+  const formatLineSuffix = (line) => {
+    const stations = occupiedByLine?.[line];
+    if (!stations) return '';
+    const running = ['Abfüllung', 'Verpackung'].filter((b) => stations?.[b]?.running);
+    if (running.length === 0) return '';
+    if (running.length === 1) return ` · ${running[0]} läuft`;
+    return ' · ausgebucht';
+  };
 
   return (
     <>
@@ -100,8 +121,15 @@ export default function SelectionBar({
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={s.confirmSmallButton} onPress={handleConfirmSelection}>
-              <Text style={s.confirmSmallButtonText}>Bestätigen</Text>
+            <TouchableOpacity
+              style={[s.confirmSmallButton, confirmDisabled && s.confirmSmallButtonDisabled]}
+              onPress={confirmDisabled ? undefined : handleConfirmSelection}
+              activeOpacity={confirmDisabled ? 1 : 0.7}
+              disabled={confirmDisabled}
+            >
+              <Text style={[s.confirmSmallButtonText, confirmDisabled && s.confirmSmallButtonTextDisabled]}>
+                Bestätigen
+              </Text>
             </TouchableOpacity>
           </>
         ) : (
@@ -140,6 +168,13 @@ export default function SelectionBar({
         )}
       </View>
 
+      {stationCheckMessage ? (
+        <Text style={s.faSearchError}>{stationCheckMessage}</Text>
+      ) : null}
+      {sensorMessage ? (
+        <Text style={s.faSearchError}>{sensorMessage}</Text>
+      ) : null}
+
       {/* Picker Modal */}
       <Modal visible={openSelectModal !== null} transparent animationType="fade">
         <View style={s.modalOverlay}>
@@ -153,21 +188,52 @@ export default function SelectionBar({
               </TouchableOpacity>
             </View>
             <ScrollView>
-              {(openSelectModal === 'line' ? LINE_OPTIONS : openSelectModal === 'leader' ? LEADER_OPTIONS : openSelectModal === 'bereich' ? BEREICH_OPTIONS : SHIFT_OPTIONS).map((opt) => (
-                <TouchableOpacity
-                  key={opt.value}
-                  style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: THEME.colors.dark.border }}
-                  onPress={() => {
-                    if (openSelectModal === 'line')    setLocalLine(opt.value);
-                    if (openSelectModal === 'leader')  setLocalLeader(opt.value);
-                    if (openSelectModal === 'shift')   setLocalShift(opt.value);
-                    if (openSelectModal === 'bereich') setLocalBereich(opt.value);
-                    setOpenSelectModal(null);
-                  }}
-                >
-                  <Text style={{ color: THEME.colors.dark.foreground, fontWeight: '600' }}>{opt.label}</Text>
-                </TouchableOpacity>
-              ))}
+              {(openSelectModal === 'line' ? LINE_OPTIONS : openSelectModal === 'leader' ? LEADER_OPTIONS : openSelectModal === 'bereich' ? BEREICH_OPTIONS : SHIFT_OPTIONS).map((opt) => {
+                const isBereichOpt = openSelectModal === 'bereich';
+                const isLineOpt = openSelectModal === 'line';
+
+                let blocked = false;
+                let suffix = '';
+                if (isBereichOpt) {
+                  blocked = isBlocked(opt.value);
+                  const info = occupiedStations?.[opt.value];
+                  if (blocked && info?.running) {
+                    suffix = ` · läuft${info.shift ? ` (${info.shift})` : ''}`;
+                  }
+                } else if (isLineOpt) {
+                  blocked = isLineBlocked(opt.value);
+                  suffix = formatLineSuffix(opt.value);
+                }
+
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={{
+                      paddingVertical: 12,
+                      borderBottomWidth: 1,
+                      borderBottomColor: THEME.colors.dark.border,
+                      opacity: blocked ? 0.4 : 1,
+                    }}
+                    activeOpacity={blocked ? 1 : 0.7}
+                    disabled={blocked}
+                    onPress={() => {
+                      if (blocked) return;
+                      if (openSelectModal === 'line')    setLocalLine(opt.value);
+                      if (openSelectModal === 'leader')  setLocalLeader(opt.value);
+                      if (openSelectModal === 'shift')   setLocalShift(opt.value);
+                      if (openSelectModal === 'bereich') setLocalBereich(opt.value);
+                      setOpenSelectModal(null);
+                    }}
+                  >
+                    <Text style={{
+                      color: blocked ? THEME.colors.dark.foregroundMuted : THEME.colors.dark.foreground,
+                      fontWeight: '600',
+                    }}>
+                      {opt.label}{suffix}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 }}>
               <TouchableOpacity onPress={() => setOpenSelectModal(null)} style={[s.modalButton, s.modalCancel]}>

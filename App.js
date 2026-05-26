@@ -1,34 +1,61 @@
 import React, { useEffect } from 'react';
+import { AppState } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as BackgroundFetch from 'expo-background-fetch';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import ProtocolScreen from './src/screens/ProtocolScreen';
 import { ShiftProvider } from './src/context/ShiftContext';
 import { BACKGROUND_SYNC_TASK } from './src/tasks/backgroundSyncTask';
+import AppErrorBoundary from './src/components/AppErrorBoundary';
+
+async function registerBgSync() {
+  try {
+    await BackgroundFetch.registerTaskAsync(BACKGROUND_SYNC_TASK, {
+      minimumInterval: 900,   // 15 Minuten – seltener = weniger Störungen
+      stopOnTerminate: false,
+      startOnBoot: true,
+    });
+  } catch (_) {
+    // Task bereits registriert – kein Problem
+  }
+}
+
+async function unregisterBgSync() {
+  try {
+    await BackgroundFetch.unregisterTaskAsync(BACKGROUND_SYNC_TASK);
+  } catch (_) {}
+}
 
 export default function App() {
   useEffect(() => {
-    // Bildschirm dauerhaft an halten (Produktionstablet)
     activateKeepAwakeAsync();
 
-    // Hintergrund-Sync registrieren (alle 15 Min. durch OS – Minimum)
-    BackgroundFetch.registerTaskAsync(BACKGROUND_SYNC_TASK, {
-      minimumInterval: 60,        // 60 Sekunden – OS erlaubt weniger als 15min nur auf Android
-      stopOnTerminate: false,     // auch nach App-Close weiter laufen
-      startOnBoot: true,          // nach Neustart automatisch starten
-    }).catch(() => {
-      // schlägt fehl wenn Task bereits registriert – kein Problem
+    // App ist geöffnet → Background-Task deaktivieren, damit kein Catalyst-Neuaufbau
+    // (weißer Bildschirm) im Vordergrund ausgelöst wird.
+    unregisterBgSync();
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        // Wieder im Vordergrund → Task stoppen
+        unregisterBgSync();
+      } else if (nextState === 'background') {
+        // In den Hintergrund gewechselt → Task aktivieren
+        registerBgSync();
+      }
     });
 
     return () => {
+      subscription.remove();
       deactivateKeepAwake();
     };
   }, []);
 
   return (
-    <ShiftProvider>
-      <StatusBar style="light" hidden={true} translucent={true} />
-      <ProtocolScreen onBack={() => { /* no-op: HomeScreen removed */ }} />
-    </ShiftProvider>
+    <AppErrorBoundary>
+      <ShiftProvider>
+        <StatusBar style="light" hidden={true} translucent={true} />
+        <ProtocolScreen onBack={() => { /* no-op: HomeScreen removed */ }} />
+      </ShiftProvider>
+    </AppErrorBoundary>
   );
 }
