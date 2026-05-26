@@ -22,18 +22,17 @@ export const USE_IONOS_VIA_LOCAL_PROXY =
 // Sensor mapping per Linie/Bereich
 // Werte können ein String (ein Sensor) oder ein Array (mehrere Sensoren) sein.
 // Linie 1 -> Bereichsabhängig: Abfüllung / Verpackung
-// Linie 2 -> Bereichsabhängig (Verpackung: 2× Pi). Abfüllung: Pi erwartet Kontext "Linie 1" –
-// siehe resolvePiSensorBridge / getSensorUrlsForLine (Tablet bleibt Linie 2 für DB/UI).
+// Linie 2 -> Bereichsabhängig (Verpackung: 2× Pi). Abfüllung nutzt eigenen Eintrag in SENSOR_MAPPING.
 // Linie 3 -> Testsensor localhost:5003
 const SENSOR_MAPPING = {
   'Linie 1': {
-    default: 'http://192.168.10.78:3000',
-    Abfüllung: 'http://192.168.10.78:3000',
+    default: 'http://192.168.10.145:3000',
+    Abfüllung: 'http://192.168.10.145:3000',
     Verpackung: 'http://192.168.10.25:3000',
   },
   'Linie 2': {
     default: 'http://localhost:5002',
-    Abfüllung: 'http://192.168.10.78:3000',
+    Abfüllung: 'http://192.168.10.145:3000',
     Verpackung: ['http://192.168.2.53:3000', 'http://192.168.10.26:3000'],
   },
   'Linie 3': {
@@ -132,7 +131,7 @@ export const resolveMdnsHost = async (rawUrl, timeout = 4000) => {
 };
 
 /**
- * Pi/Sensor erwartet ggf. andere Linie im JSON als am Tablet (DB/UI unverändert).
+ * Sensor-URL und Pi-Kontext zur Tablet-Linie (keine Umbenennung mehr).
  * @returns {{ urlLine: string|null|undefined, urlBereich: string|null|undefined, contextLinie: string|null|undefined }}
  */
 export function resolvePiSensorBridge(tabletLine, bereich = null) {
@@ -140,14 +139,6 @@ export function resolvePiSensorBridge(tabletLine, bereich = null) {
     return { urlLine: tabletLine, urlBereich: bereich, contextLinie: tabletLine };
   }
   const lineStr = String(tabletLine);
-  const b = bereich != null && bereich !== '' ? String(bereich) : '';
-  if (lineStr === 'Linie 2' && b === 'Abfüllung') {
-    return {
-      urlLine: 'Linie 1',
-      urlBereich: 'Abfüllung',
-      contextLinie: 'Linie 1',
-    };
-  }
   return { urlLine: lineStr, urlBereich: bereich, contextLinie: lineStr };
 }
 
