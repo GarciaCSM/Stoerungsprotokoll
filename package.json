@@ -24,7 +24,7 @@
     "test:sensor5": "node Sensoren/test-sensor-5.js",
     "test:simulate-context": "node src/Test/simulate_context.js",
     "sync:ionos": "node scripts/sync-ionos-once.js",
-    "build:apk": "cd android && gradlew.bat assembleRelease",
+    "build:apk": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-android-release.ps1",
     "install:apk": "adb install -r android/app/build/outputs/apk/release/app-release.apk",
     "logcat:capture": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/android-logcat-capture.ps1"
   },
@@ -37,7 +37,7 @@
     "expo": "~48.0.21",
     "expo-background-fetch": "~11.1.1",
     "expo-dev-client": "~2.2.1",
-    "expo-document-picker": "~11.0.0",
+    "expo-document-picker": "~11.2.2",
     "expo-file-system": "~15.2.2",
     "expo-keep-awake": "~12.0.1",
     "expo-splash-screen": "~0.18.2",

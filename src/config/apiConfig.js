@@ -33,7 +33,7 @@ const SENSOR_MAPPING = {
   'Linie 2': {
     default: 'http://localhost:5002',
     Abfüllung: 'http://192.168.10.145:3000',
-    Verpackung: ['http://192.168.2.53:3000', 'http://192.168.10.26:3000'],
+    Verpackung: ['http://192.168.4.26:3000', 'http://192.168.10.26:3000'],
   },
   'Linie 3': {
     default: 'http://192.168.10.25:3000',
