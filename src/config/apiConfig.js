@@ -26,8 +26,8 @@ export const USE_IONOS_VIA_LOCAL_PROXY =
 // Linie 3 -> Testsensor localhost:5003
 const SENSOR_MAPPING = {
   'Linie 1': {
-    default: 'http://192.168.10.145:3000',
-    Abfüllung: 'http://192.168.10.145:3000',
+    default: 'http://192.168.2.30:3000',
+    Abfüllung: 'http://192.168.2.30:3000',
     Verpackung: 'http://192.168.10.25:3000',
   },
   'Linie 2': {
