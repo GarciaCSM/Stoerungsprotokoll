@@ -20,16 +20,23 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "plugins": [
+      "expo-barcode-scanner"
+    ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.stoerungsprotokoll.app"
+      "bundleIdentifier": "com.stoerungsprotokoll.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Kamera wird zum Scannen von FA-Nummern auf Barcodes verwendet."
+      }
     },
     "android": {
       "package": "com.stoerungsprotokoll.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/app-icon.png",
         "backgroundColor": "#0f1729"
-      }
+      },
+      "permissions": ["android.permission.CAMERA"]
     },
     "extra": {
       "eas": {

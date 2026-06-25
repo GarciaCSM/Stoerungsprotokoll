@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, ScrollView } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import s from '../../../styles/ProtocolScreenStyles';
 import { THEME } from '../../../styles/globalStyles';
+import QrScannerModal from './QrScannerModal';
 
 export default function FaSection({
   faSearchText, setFaSearchText,
@@ -18,6 +19,14 @@ export default function FaSection({
   lockMessage = 'Bitte zuerst Linie, Schicht, Linienführer und Bereich auswählen und bestätigen.',
   lockIcon = 'lock',
 }) {
+  const [scannerVisible, setScannerVisible] = useState(false);
+
+  function handleScanned(value) {
+    setScannerVisible(false);
+    setFaSearchText(value);
+    handleFASearch(value);
+  }
+
   return (
     <View style={s.faSectionCard}>
       <Text style={s.sectionTitle}>FERTIGUNGSAUFTRAG</Text>
@@ -31,6 +40,11 @@ export default function FaSection({
         </View>
       ) : !selectedFA ? (
         <>
+          <QrScannerModal
+            visible={scannerVisible}
+            onScanned={handleScanned}
+            onClose={() => setScannerVisible(false)}
+          />
           <View style={s.faSearchContainer}>
             <TextInput
               style={s.faSearchInput}
@@ -41,6 +55,13 @@ export default function FaSection({
               autoCapitalize="characters"
               onSubmitEditing={handleFASearch}
             />
+            <TouchableOpacity
+              style={s.faSearchButton}
+              onPress={() => setScannerVisible(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+            >
+              <MaterialIcons name="qr-code-scanner" size={20} color={THEME.colors.dark.foreground} />
+            </TouchableOpacity>
             <TouchableOpacity style={s.faSearchButton} onPress={handleFASearch} disabled={isSearching}>
               <MaterialIcons name="search" size={20} color={THEME.colors.dark.foreground} />
             </TouchableOpacity>

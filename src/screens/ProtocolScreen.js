@@ -292,7 +292,7 @@ const ProtocolScreen = () => {
 
   // useSollData vor useDbSync – damit istValue beim Sync verfügbar ist
   const {
-    sollPerHour, anzahlArbeiter, istValue,
+    sollPerHour, anzahlArbeiter, istValue, sensorError,
     isImportingSoll, isFetchingSoll,
     handleImportSoll, handleRefreshSoll,
   } = useSollData({ selectedFA, shiftData });
@@ -598,13 +598,14 @@ const ProtocolScreen = () => {
     })();
   }, []);
 
-  //  FA search 
-  const handleFASearch = async () => {
+  //  FA search — queryOverride wird vom QR-Scanner übergeben, sonst wird faSearchText verwendet
+  const handleFASearch = async (queryOverride) => {
+    const query = typeof queryOverride === 'string' ? queryOverride.trim() : faSearchText.trim();
     setFaSearchError(''); setFaSearchResults([]);
-    if (!faSearchText.trim()) return;
+    if (!query) return;
     setIsSearching(true);
     try {
-      const data = await FAService.searchFA(faSearchText);
+      const data = await FAService.searchFA(query);
       if (data.success) {
         if (data.results.length === 0) setFaSearchError('FA nicht gefunden oder Status ungültig (erlaubt: 30, 35, 36)');
         else setFaSearchResults(data.results);
@@ -957,6 +958,7 @@ const ProtocolScreen = () => {
             isImportingSoll={isImportingSoll} isFetchingSoll={isFetchingSoll}
             handleImportSoll={handleImportSoll} handleRefreshSoll={handleRefreshSoll}
             formatTime={formatTime}
+            sensorError={sensorError}
           />
         </View>
 
