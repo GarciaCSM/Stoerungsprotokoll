@@ -19,6 +19,7 @@ export function useSollData({ selectedFA, shiftData }) {
   const [isImportingSoll, setIsImportingSoll] = useState(false);
   const [isFetchingSoll, setIsFetchingSoll] = useState(false);
   const [istValue, setIstValue] = useState(0);
+  const [sensorError, setSensorError] = useState(false);
 
   // ─── Load cache, then silently refresh from server ──────────────────────────
   useEffect(() => {
@@ -71,8 +72,10 @@ export function useSollData({ selectedFA, shiftData }) {
       try {
         if (!linie || !schicht) { if (mounted) setIstValue(0); return; }
         const v = await FAService.getDbIst(linie, schicht, datum, bereich);
-        if (mounted) setIstValue(v);
-      } catch (_) {}
+        if (mounted) { setIstValue(v); setSensorError(false); }
+      } catch (_) {
+        if (mounted) setSensorError(true);
+      }
     };
     poll();
     const timer = setInterval(poll, 1000);
@@ -135,7 +138,7 @@ export function useSollData({ selectedFA, shiftData }) {
 
   return {
     sollPerHour, sollMap, arbeitMap, anzahlArbeiter,
-    istValue, isImportingSoll, isFetchingSoll,
+    istValue, sensorError, isImportingSoll, isFetchingSoll,
     handleImportSoll, handleRefreshSoll,
   };
 }

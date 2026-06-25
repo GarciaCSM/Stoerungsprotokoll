@@ -20,6 +20,7 @@ export default function SollIstZeitRow({
   isImportingSoll, isFetchingSoll,
   handleImportSoll, handleRefreshSoll,
   formatTime,
+  sensorError,
 }) {
   const [showTaktDropdown, setShowTaktDropdown] = useState(false);
   // elapsed represents brutto time. For netto and takt-netto we remove pause and disturbance time.
@@ -86,7 +87,13 @@ export default function SollIstZeitRow({
             <Text style={[s.sollIstValue, { color: istColor }]}>{_ist}</Text>
             <Text style={{ color: istColor + 'AA', fontSize: 13, marginBottom: 7 }}>Stk</Text>
           </View>
-          {_soll > 0 ? (
+          {sensorError && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
+              <MaterialIcons name="wifi-off" size={12} color={THEME.colors.dark.danger} />
+              <Text style={{ fontSize: 11, fontWeight: '600', color: THEME.colors.dark.danger }}>Sensor offline</Text>
+            </View>
+          )}
+          {!sensorError && _soll > 0 ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
               <MaterialIcons
                 name={istDiff >= 0 ? 'arrow-upward' : 'arrow-downward'}
@@ -97,9 +104,9 @@ export default function SollIstZeitRow({
                 {istDiff >= 0 ? '+' : ''}{istDiff} Stk
               </Text>
             </View>
-          ) : (
+          ) : !sensorError ? (
             <Text style={{ fontSize: 11, color: THEME.colors.dark.foregroundDim, marginTop: 2 }}>Kein SOLL geladen</Text>
-          )}
+          ) : null}
         </View>
       </View>
 

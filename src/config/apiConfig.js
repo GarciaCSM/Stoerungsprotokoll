@@ -10,7 +10,7 @@ export const LOCAL_DEV_SERVER = 'http://localhost:3001';
 // (works when the device is connected and `adb reverse tcp:3001 tcp:3001` is active).
 export const API_BASE_URL = USE_LOCALHOST
   ? `${LOCAL_DEV_SERVER}/api`
-  : 'http://192.168.10.152:3001/api'; // keine statische IP und PORT wurde noch nicht freigegeben (die kümmern sich anscheinend drum...)
+  : 'http://100.78.22.12:3001/api'; // mdev-optiplex-3070-1 via Tailscale
 
 /**
  * USB-Dev (__DEV__): IONOS über lokalen Proxy (server.js /ionos-proxy) – kein CORS, gleicher Host wie FA-Fallback.
@@ -24,20 +24,22 @@ export const USE_IONOS_VIA_LOCAL_PROXY =
 // Linie 1 -> Bereichsabhängig: Abfüllung / Verpackung
 // Linie 2 -> Bereichsabhängig (Verpackung: 2× Pi). Abfüllung nutzt eigenen Eintrag in SENSOR_MAPPING.
 // Linie 3 -> Testsensor localhost:5003
+// Tailscale-IPs: funktionieren über alle VLANs/WLANs
+// csm-pi-1 = 100.118.222.40 | csm-pi-2 = 100.94.200.48 (aktuell aktiv)
 const SENSOR_MAPPING = {
   'Linie 1': {
-    default: 'http://192.168.10.145:3000',
-    Abfüllung: 'http://192.168.10.145:3000',
-    Verpackung: 'http://192.168.10.25:3000',
+    default: 'http://100.118.222.40:3000',   // csm-pi-1
+    Abfüllung: 'http://100.118.222.40:3000',
+    Verpackung: 'http://100.118.222.40:3000',
   },
   'Linie 2': {
-    default: 'http://localhost:5002',
-    Abfüllung: ['http://192.168.4.145:3000', 'http://192.168.10.145:3000'],
-    Verpackung: ['http://192.168.4.26:3000', 'http://192.168.10.26:3000'],
+    default: 'http://100.94.200.48:3000',    // csm-pi-2
+    Abfüllung: 'http://100.94.200.48:3000',
+    Verpackung: 'http://100.94.200.48:3000',
   },
   'Linie 3': {
-    default: 'http://192.168.10.25:3000',
-    Abfüllung: 'http://192.168.10.25:3000',
+    default: 'http://localhost:5003',
+    Abfüllung: 'http://localhost:5003',
     Verpackung: 'http://localhost:5003',
   },
 };

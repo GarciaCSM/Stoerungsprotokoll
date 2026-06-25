@@ -40,10 +40,3 @@ allprojects {
         maven { url 'https://www.jitpack.io' }
     }
 }
-
-subprojects { project ->
-    if (project.projectDir.toString().contains("node_modules")) {
-        // Avoid writing build outputs inside node_modules on Windows
-        project.buildDir = new File(rootProject.buildDir, "node_modules/${project.name}")
-    }
-}
